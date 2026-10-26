@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Earth Rhythms</title>
+  <meta name="description" content="See and hear the planet's rhythms — day and night, moon, tides, wind, earthquakes and aurora — from live open data.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <h1>Earth Rhythms</h1>
+      <p class="tag">Live open data, turned into light and sound</p>
+    </div>
+    <div class="top-actions">
+      <button id="listen" class="btn primary" aria-pressed="false">▶ Listen</button>
+      <label class="vol" title="Volume">
+        <span class="sr">Volume</span>
+        <input id="volume" type="range" min="0" max="1" step="0.01" value="0.7">
+      </label>
+    </div>
+  </header>
+
+  <main>
+    <section class="map-wrap">
+      <canvas id="map" aria-label="World map of Earth's rhythms. Tap to move the listening point."></canvas>
+      <div id="tooltip" class="tooltip" hidden></div>
+      <div class="map-hint">Tap the map to move your listening point</div>
+    </section>
+
+    <section class="transport">
+      <div class="where">
+        <form id="search" class="search" autocomplete="off">
+          <input id="search-input" type="search" placeholder="Search a place…" aria-label="Search a place">
+          <ul id="search-results" class="results" hidden></ul>
+        </form>
+        <button id="locate" class="btn" title="Use my location">◎ Me</button>
+        <div class="place"><span id="place-name">Horseshoe Bay, BC</span> <span id="place-coords" class="muted"></span></div>
+      </div>
+      <div class="clock">
+        <button id="live" class="btn on">● Live</button>
+        <button id="play" class="btn">▶ Time-lapse</button>
+        <select id="speed" aria-label="Time-lapse speed">
+          <option value="600">10 min / sec</option>
+          <option value="3600" selected>1 hour / sec</option>
+          <option value="10800">3 hours / sec</option>
+          <option value="21600">6 hours / sec</option>
+        </select>
+        <div class="time"><span id="time-local"></span> <span id="time-utc" class="muted"></span></div>
+      </div>
+    </section>
+
+    <section class="timeline-wrap">
+      <canvas id="timeline" aria-label="Timeline of rhythms at the listening point. Drag to scrub through time."></canvas>
+    </section>
+
+    <section class="layers">
+      <h2>Rhythms</h2>
+      <p class="muted small">👁 shows a layer on the map and timeline · 🔊 adds it to the sound</p>
+      <ul id="layer-list"></ul>
+    </section>
+
+    <section class="about">
+      <h2>Where the data comes from</h2>
+      <ul id="sources" class="sources"></ul>
+      <p class="muted small">
+        Sun and moon positions are calculated in your browser from orbital formulas, so they work offline.
+        Everything else is fetched live from free, open services. Times show local time at the listening point.
+        The aurora band is an approximation from the global Kp index, not a forecast for your location.
+      </p>
+    </section>
+  </main>
+
+  <script src="vendor/topojson-client.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
