@@ -3,11 +3,20 @@
 import * as THREE from '../vendor/three.module.min.js';
 
 export async function loadTerrain(id) {
-  const [meta, buf] = await Promise.all([
+  const [meta, blob] = await Promise.all([
     fetch(`data/${id}.json`).then(r => r.json()),
-    fetch(`data/${id}.bin`).then(r => r.arrayBuffer()),
+    fetch(`data/${id}.png`).then(r => r.blob()),
   ]);
-  return new Terrain(meta, new Uint16Array(buf));
+  // Heights are packed in the PNG's red (high byte) and green (low byte).
+  const img = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width; canvas.height = img.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const px = ctx.getImageData(0, 0, img.width, img.height).data;
+  const raw = new Uint16Array(img.width * img.height);
+  for (let i = 0; i < raw.length; i++) raw[i] = px[i * 4] * 256 + px[i * 4 + 1];
+  return new Terrain(meta, raw);
 }
 
 export class Terrain {

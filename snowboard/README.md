@@ -30,7 +30,7 @@ python3 -m http.server 8000
 Open Data: SRTM, Canadian CDEM and other public data, about 6 m per pixel here),
 crops the course, smooths it slightly and saves:
 
-- `data/whistler.bin`: the height grid (495 × 635 cells, 12.3 m each)
+- `data/whistler.png`: the height grid, packed into a lossless image (495 × 635 cells, 12.3 m each)
 - `data/whistler.json`: size, location and a guide line down the mountain
 
 The guide line is a shortest-path search that prefers 12–30° slopes, avoids cliffs and

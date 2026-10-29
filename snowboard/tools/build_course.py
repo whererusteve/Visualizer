@@ -3,7 +3,8 @@
 Downloads free elevation tiles (Mapzen/AWS "Terrarium" tiles, no API key),
 crops the area of one course, and writes two files the game loads:
 
-  data/<id>.bin   heights as unsigned 16-bit numbers, in decimetres
+  data/<id>.png   heights in decimetres, packed into a lossless PNG:
+                  red = high byte, green = low byte (blue unused)
   data/<id>.json  grid size, cell size, real-world position, and a guide line
                   (the "route") from the start to the finish
 
@@ -180,7 +181,10 @@ def main(course_id):
 
     os.makedirs(OUT, exist_ok=True)
     dm = np.clip(np.round(h * 10), 0, 65535).astype("<u2")
-    dm.tofile(os.path.join(OUT, f"{course_id}.bin"))
+    rgb = np.zeros((Hc, Wc, 3), np.uint8)
+    rgb[..., 0] = dm >> 8
+    rgb[..., 1] = dm & 255
+    Image.fromarray(rgb, "RGB").save(os.path.join(OUT, f"{course_id}.png"), optimize=True)
     meta = {
         "id": course_id,
         "name": cfg["name"],
