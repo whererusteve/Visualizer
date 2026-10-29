@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Peak Rush</title>
+  <meta name="description" content="A snowboarding game on real mountains. Collect stars and hit jumps from Whistler Peak to the Village.">
+  <link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div class="hud" aria-live="off">
+    <div class="pill stars"><span class="star-icon">★</span> <span id="stars">0 / 0</span></div>
+    <div class="pill right">
+      <div><span id="speed">0</span> <small>km/h</small></div>
+      <div><span id="elev">0</span> <small>m</small></div>
+      <div><span id="clock">0:00.0</span></div>
+      <div><span id="togo">–</span> <small>to go</small></div>
+    </div>
+    <div class="charge"><div id="charge"></div></div>
+    <button id="restart" class="restart" title="Restart (R)">↺</button>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <div class="touch" aria-hidden="true">
+    <div class="pad left-pad">
+      <button data-touch="left">◀</button>
+      <button data-touch="right">▶</button>
+    </div>
+    <div class="pad right-pad">
+      <button data-touch="tuck" class="small">Tuck</button>
+      <button data-touch="brake" class="small">Brake</button>
+      <button data-touch="jump" class="jump">Jump</button>
+    </div>
+  </div>
+
+  <div id="intro" class="panel">
+    <h1>Peak Rush</h1>
+    <p id="course-name" class="sub">Loading…</p>
+    <p class="note">Real terrain from elevation data. Grab the stars, hit the jumps, get to the bottom.</p>
+    <table class="keys">
+      <tr><td>← → or A D</td><td>Carve left and right (spin in the air)</td></tr>
+      <tr><td>Space</td><td>Jump — hold for a bigger pop</td></tr>
+      <tr><td>↑ or W</td><td>Tuck for speed, or push on the flats</td></tr>
+      <tr><td>↓ or S</td><td>Brake</td></tr>
+      <tr><td>R</td><td>Restart from the top</td></tr>
+    </table>
+    <p id="loading" class="note">Building the mountain…</p>
+    <button id="drop" class="go" disabled>Drop in</button>
+  </div>
+
+  <div id="finish" class="panel" hidden>
+    <h1>Made it!</h1>
+    <p class="big">Time <strong id="f-time"></strong></p>
+    <p class="big">Stars <strong id="f-stars"></strong></p>
+    <button id="again" class="go">Ride again</button>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,5 +1,7 @@
 # Earth Rhythms
 
+> Also in this repository: **[Peak Rush](snowboard/)**, a snowboarding game on real Whistler terrain. See `snowboard/README.md`.
+
 A web app that shows and plays the planet's rhythms from live open data: day and night, the moon,
 tides, wind, air temperature, earthquakes and geomagnetic activity (aurora). Each rhythm can be
 turned on or off for both the map and the sound, so you can watch and hear how they line up.
