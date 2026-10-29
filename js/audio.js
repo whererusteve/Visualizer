@@ -61,16 +61,21 @@ export class Sonifier {
     comp.threshold.value = -18;
     comp.ratio.value = 4;
     comp.connect(ctx.destination);
+    // `duck` briefly silences everything when switching between live and time-lapse.
+    this.duck = ctx.createGain();
+    this.duck.connect(comp);
     this.master = ctx.createGain();
     this.master.gain.value = 0;
-    this.master.connect(comp);
+    this.master.connect(this.duck);
 
-    // Shared reverb gives everything one acoustic "room".
-    this.reverb = ctx.createConvolver();
-    this.reverb.buffer = reverbImpulse(ctx);
-    const wet = ctx.createGain();
-    wet.gain.value = 0.45;
-    this.reverb.connect(wet).connect(this.master);
+    // Shared reverb gives everything one acoustic "room". Voices feed `reverbIn`;
+    // the reverb itself can be swapped out to cut off an old echo tail.
+    this.impulse = reverbImpulse(ctx);
+    this.reverbIn = ctx.createGain();
+    this.wet = ctx.createGain();
+    this.wet.gain.value = 0.45;
+    this.wet.connect(this.master);
+    this.newReverb();
 
     const voiceOut = (sendAmt = 0.5) => {
       const g = ctx.createGain();
@@ -78,7 +83,7 @@ export class Sonifier {
       g.connect(this.master);
       const send = ctx.createGain();
       send.gain.value = sendAmt;
-      g.connect(send).connect(this.reverb);
+      g.connect(send).connect(this.reverbIn);
       return g;
     };
     const osc = (type, freq, dest, detune = 0) => {
@@ -186,13 +191,49 @@ export class Sonifier {
     // Quake bells feed this bus
     this.quakeBus = voiceOut(0.8);
     this.quakeBus.gain.value = 1;
+    this.newBellBus();
+    this.lastBell = 0;
+  }
+
+  newReverb() {
+    if (this.reverb) { this.reverbIn.disconnect(this.reverb); this.reverb.disconnect(); }
+    this.reverb = this.ctx.createConvolver();
+    this.reverb.buffer = this.impulse;
+    this.reverbIn.connect(this.reverb).connect(this.wet);
+  }
+
+  newBellBus() {
+    this.bellBus = this.ctx.createGain();
+    this.bellBus.connect(this.quakeBus);
+  }
+
+  // Clean switch between modes (live, time-lapse, paused): fade out, stop ringing
+  // bells, clear the echo tail, jump every voice to the new moment, fade back in.
+  transition() {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const FADE = 0.25;
+    this.duck.gain.cancelScheduledValues(now);
+    this.duck.gain.setValueAtTime(this.duck.gain.value, now);
+    this.duck.gain.linearRampToValueAtTime(0, now + FADE);
+    this.duck.gain.setTargetAtTime(1, now + FADE + 0.05, 0.3);
+    this.snapUntil = now + FADE + 0.05;
+    clearTimeout(this.cutTimer);
+    this.cutTimer = setTimeout(() => {
+      this.bellBus.disconnect();
+      this.newBellBus();
+      this.newReverb();
+    }, FADE * 1000);
   }
 
   // Called a few times per second with the current values at the listening point.
   update(s) {
     if (!this.ctx || !this.running) return;
     const now = this.ctx.currentTime;
-    const tc = 0.4;
+    // Glide time: slow in live mode, quicker in fast time-lapse so the sound
+    // doesn't lag hours behind the picture; near-instant while switching modes.
+    let tc = s.speed >= 10800 ? 0.12 : s.speed >= 3600 ? 0.2 : 0.4;
+    if (this.snapUntil && now < this.snapUntil) tc = 0.03;
     const on = (id) => s.sound[id];
 
     // Sun: day ↔ night crossfade through twilight (-12° to +8°)
@@ -235,6 +276,10 @@ export class Sonifier {
     if (!this.ctx || !this.running) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
+    if (this.snapUntil && now < this.snapUntil) return;
+    // In fast time-lapse quakes can arrive many per second; keep small ones spaced out.
+    if (mag < 5 && now - this.lastBell < 0.2) return;
+    this.lastBell = now;
     const m = clamp((mag - 2.5) / 5);
     const scale = [880, 739.99, 587.33, 493.88, 440, 369.99, 293.66, 246.94, 220, 146.83, 110, 73.42];
     const base = scale[Math.round(m * (scale.length - 1))];
@@ -245,7 +290,7 @@ export class Sonifier {
     g.gain.setValueAtTime(0.0001, now);
     g.gain.exponentialRampToValueAtTime(0.05 + 0.25 * m, now + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    g.connect(pan).connect(this.quakeBus);
+    g.connect(pan).connect(this.bellBus);
     [1, 2.76, 5.4, 8.93].forEach((ratio, i) => {
       const o = ctx.createOscillator();
       o.frequency.value = base * ratio;

@@ -208,8 +208,14 @@ function setupSearch() {
 
 // ---------- Transport ----------
 function setMode(mode) {
+  const changed = mode !== state.mode;
   state.mode = mode;
   if (mode === 'live') state.t = Date.now();
+  if (changed) {
+    // Only one clock drives the sound: hand over cleanly to the new one.
+    lastT = state.t;
+    audio.transition();
+  }
   $('live').classList.toggle('on', mode === 'live');
   $('play').classList.toggle('on', mode === 'play');
   $('play').textContent = mode === 'play' ? '❚❚ Pause' : '▶ Time-lapse';
@@ -228,7 +234,8 @@ function setupTransport() {
 }
 
 function scrub(t, jump) {
-  if (state.mode === 'live' || state.mode === 'play') setMode('paused');
+  if (state.mode !== 'paused') setMode('paused');
+  else if (jump) audio.transition(); // tapping a new spot is a jump, not a glide
   lastT = jump ? t : lastT;
   state.t = t;
 }
@@ -264,6 +271,7 @@ function sample() {
     moonPhase: ill.phase,
     kp: kpAt(state.data.kp, t),
     sound: Object.fromEntries(LAYERS.map((l) => [l.id, state.layers[l.id].sound])),
+    speed: state.mode === 'play' ? state.speed : 1,
   };
   const d = state.data.local;
   if (d) {
@@ -348,7 +356,7 @@ function frame(nowPerf) {
   if (state.mode === 'live') state.t = Date.now();
   else if (state.mode === 'play') {
     state.t += (dt / 1000) * state.speed * 1000;
-    if (state.t > state.t1) { state.t = state.t0; lastT = state.t; }
+    if (state.t > state.t1) { state.t = state.t0; lastT = state.t; audio.transition(); }
   }
   state.kpNow = kpAt(state.data.kp, state.t);
   checkQuakeCrossings();
