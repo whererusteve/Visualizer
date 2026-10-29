@@ -1,9 +1,17 @@
 # Peak Rush
 
 A snowboarding game on real mountains, in the spirit of the 3D stages in Sonic 3:
-fast, behind-the-back, collect stars and hit jumps. The first course is
-**Whistler Mountain, from Whistler Peak (2,175 m) to the Village (~690 m)**:
-6.3 km of real terrain.
+fast, behind-the-back, collect stars and hit jumps. Two runs on real Whistler terrain:
+
+- **Peak to Creek** (default): Whistler Peak (2,175 m) to Creekside (~670 m), 5.8 km,
+  1,507 m vertical. It traverses southwest off the peak around West Cirque, like Highway 86,
+  then takes the long west side down through the trees.
+- **Peak to Village**: straight down the north ridge, 6.3 km. Open with `#whistler`.
+
+The Peak to Creek line follows guide points placed on the terrain from published
+descriptions, not a surveyed trail line (OpenStreetMap couldn't be reached when it was
+built). The real run is longer (7–11 km depending on the source) because it uses more
+traverses.
 
 Scoring isn't in yet; this version is about the riding and the physics.
 
@@ -38,7 +46,7 @@ won't go uphill, so it lands on terrain a real rider would choose. Stars, jumps 
 cleared run through the forest are placed along it when the game loads.
 
 To add a mountain, add an entry to `COURSES` in the script (bounds, start, finish) and run
-`python3 tools/build_course.py <id>`, then open `/snowboard/?course=<id>`.
+`python3 tools/build_course.py <id>`, then open `/snowboard/#<id>`.
 
 ## Files
 

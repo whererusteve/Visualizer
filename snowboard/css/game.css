@@ -54,6 +54,8 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .panel[hidden] { display: none; }
 .panel h1 { margin: 0; font-size: 36px; font-weight: 900; font-style: italic; color: var(--accent); letter-spacing: -1px; }
 .sub { margin: 4px 0 10px; font-weight: 700; }
+.pick { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 600; }
+.pick select { font: inherit; padding: 4px 8px; border-radius: 8px; border: 1px solid rgba(15, 23, 42, 0.25); background: #fff; color: var(--ink); }
 .note { margin: 8px 0; font-size: 14px; opacity: 0.8; }
 .big { font-size: 20px; margin: 8px 0; }
 .keys { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; margin: 10px 0; }

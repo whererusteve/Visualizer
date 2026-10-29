@@ -9,7 +9,9 @@ export const LAYOUT = {
   jumpEvery: 300,       // metres between jumps
   jumpSize: { length: 12, width: 8, height: 2.4 },
   treeline: 1720,       // metres above sea level; no trees above this
-  treeSpacing: 15,      // metres between tree candidates
+  treeSpacing: 13,      // metres between tree candidates
+  runWidth: { base: 21, swing: 5 }, // half-width of the cleared run, metres
+  poleEvery: 22,        // metres between boundary poles
   forestDepth: 380,     // how far from the run the forest is drawn
   seed: 7,
 };
@@ -212,19 +214,48 @@ function treeGeometry() {
   return g;
 }
 
+// Half the width of the run at a distance along it. Real Whistler runs cut
+// through the trees are roughly 30-60 m wide, wider in some places than others.
+// Extra room after each jump for wobbly landings.
+export function halfWidth(route, s) {
+  const L = LAYOUT.runWidth;
+  let w = L.base + L.swing * Math.sin(s / 170) + L.swing * 0.5 * Math.sin(s / 47 + 1.3);
+  for (const k of route.kickerS || []) if (s > k - 20 && s < k + 110) w += 12;
+  return w;
+}
+
+// Bamboo boundary poles with orange tops along both edges of the run.
+function boundaryPoles(terrain, route) {
+  const spots = [];
+  for (let s = 30; s < route.length - 40; s += LAYOUT.poleEvery) {
+    const p = route.at(s), w = halfWidth(route, s) + 1;
+    for (const side of [-1, 1]) {
+      const x = p.x - p.dz * side * w, z = p.z + p.dx * side * w;
+      spots.push({ x, z, y: terrain.groundHeight(x, z) });
+    }
+  }
+  const geo = new THREE.CylinderGeometry(0.045, 0.045, 1.9, 5);
+  geo.translate(0, 0.95, 0);
+  const col = [];
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const top = pos.getY(i) > 1.4;
+    col.push(...(top ? [1, 0.42, 0.05] : [0.85, 0.75, 0.5]));
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }), spots.length);
+  const m = new THREE.Matrix4();
+  spots.forEach((p, i) => { m.makeTranslation(p.x, p.y - 0.1, p.z); mesh.setMatrixAt(i, m); });
+  mesh.computeBoundingSphere();
+  return mesh;
+}
+
 function placeTrees(terrain, route, rand) {
   const trees = [];
   const step = LAYOUT.treeSpacing;
   const samples = [];
   for (let s = 0; s <= route.length; s += 20) samples.push({ ...route.at(s), s });
-  // The cleared run is wider in some places than others, like a real trail.
-  // Extra room after each jump for wobbly landings.
-  const kickerS = route.kickerS || [];
-  const runHalfWidth = s => {
-    let w = 30 + 10 * Math.sin(s / 170) + 5 * Math.sin(s / 47 + 1.3);
-    for (const k of kickerS) if (s > k - 20 && s < k + 110) w += 16;
-    return w;
-  };
+  const runHalfWidth = s => halfWidth(route, s);
   const D = LAYOUT.forestDepth;
   const minX = Math.max(0, Math.min(...samples.map(p => p.x)) - D);
   const maxX = Math.min(terrain.sizeX, Math.max(...samples.map(p => p.x)) + D);
@@ -348,8 +379,10 @@ export function buildCourse(terrain, scene) {
   }
 
   const start = route.at(0), end = route.at(route.length);
-  scene.add(gate(terrain, route.at(14), 'WHISTLER PEAK', '#1d4ed8'));
-  scene.add(gate(terrain, route.at(route.length - 25), 'FINISH', '#dc2626'));
+  scene.add(boundaryPoles(terrain, route));
+  const [startLabel, endLabel] = terrain.meta.labels || ['START', 'FINISH'];
+  scene.add(gate(terrain, route.at(14), startLabel, '#1d4ed8'));
+  scene.add(gate(terrain, route.at(route.length - 25), endLabel, '#dc2626'));
 
   return {
     route, kickers, stars, starMesh, trees, start, end,

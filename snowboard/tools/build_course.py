@@ -41,6 +41,27 @@ COURSES = {
         "downsample": 2,     # game grid is about 12 m per cell
         "start": (50.0587, -122.9555),   # just below Whistler Peak (2,182 m)
         "finish": (50.1140, -122.9520),  # Whistler Village base
+        "labels": ("WHISTLER PEAK", "VILLAGE"),
+    },
+    # Peak to Creek: Whistler's longest run, down the west side to Creekside.
+    # OpenStreetMap was not reachable when this was built, so the line is
+    # steered through guide points placed on the real terrain (published
+    # facts: starts at the Peak Express, ~1,500 m vertical, ends at Creekside).
+    "peak-to-creek": {
+        "name": "Whistler — Peak to Creek",
+        "terrain": "whistler",  # same mountain data as above
+        "start": (50.0592, -122.9569),
+        "via": [
+            (50.05817, -122.96294),  # traverse southwest off the peak, around West Cirque (~2,060 m)
+            (50.05784, -122.97238),  # end of the shoulder (~1,840 m)
+            (50.07305, -122.97067),  # upper/lower split, near treeline (~1,480 m)
+            (50.08186, -122.97753),  # lower run in the trees (~1,040 m)
+            (50.08847, -122.98268),  # above Creekside (~840 m)
+        ],
+        "finish": (50.0934, -122.9878),  # Creekside base
+        "labels": ("PEAK TO CREEK", "CREEKSIDE"),
+        # Published: ~1,500 m vertical over 7-11 km, so about 8-12 degrees.
+        "grade": 0.2,
     },
 }
 
@@ -89,7 +110,7 @@ def blur(a, passes=2):
     return a
 
 
-def find_route(h, cell, start, finish):
+def find_route(h, cell, start, finish, target_grade=None):
     """Cheapest downhill path on the grid (Dijkstra)."""
     H, W = h.shape
     gy, gx = np.gradient(h, cell)
@@ -120,6 +141,11 @@ def find_route(h, cell, start, finish):
             c = run * 0.5 * (pen[y, x] + pen[ny, nx])
             if rise > 0:
                 c += rise * 60  # going uphill on a board is very expensive
+            elif target_grade:
+                # Real runs traverse: penalise dropping faster than the
+                # run's typical gradient, so the line cuts across the slope.
+                over = max(0.0, -rise / run - target_grade) / target_grade
+                c += run * over * over * 30
             nd = d + c
             if nd < dist[ny, nx]:
                 dist[ny, nx] = nd
@@ -152,7 +178,12 @@ def smooth_and_resample(path, cell, step=6.0, window=9):
 
 
 def main(course_id):
-    cfg = COURSES[course_id]
+    cfg = dict(COURSES[course_id])
+    terrain_id = cfg.get("terrain", course_id)
+    if terrain_id != course_id:
+        base = COURSES[terrain_id]
+        for k in ("bounds", "zoom", "downsample"):
+            cfg.setdefault(k, base[k])
     z, ds = cfg["zoom"], cfg["downsample"]
     raw, (fx0, fy0) = load_area(cfg["bounds"], z)
     north = cfg["bounds"][0]
@@ -176,7 +207,11 @@ def main(course_id):
     win = h[sy - r:sy + r, sx - r:sx + r]
     iy, ix = np.unravel_index(win.argmax(), win.shape)
     sy, sx = sy - r + iy, sx - r + ix
-    path = find_route(h, cell, (sy, sx), (fy, fx))
+    stops = [(sy, sx)] + [to_cell(*v) for v in cfg.get("via", [])] + [(fy, fx)]
+    path = []
+    for a, b in zip(stops, stops[1:]):
+        leg = find_route(h, cell, a, b, cfg.get("grade"))
+        path += leg if not path else leg[1:]
     route = smooth_and_resample(path, cell)
 
     os.makedirs(OUT, exist_ok=True)
@@ -184,10 +219,12 @@ def main(course_id):
     rgb = np.zeros((Hc, Wc, 3), np.uint8)
     rgb[..., 0] = dm >> 8
     rgb[..., 1] = dm & 255
-    Image.fromarray(rgb, "RGB").save(os.path.join(OUT, f"{course_id}.png"), optimize=True)
+    Image.fromarray(rgb, "RGB").save(os.path.join(OUT, f"{terrain_id}.png"), optimize=True)
     meta = {
         "id": course_id,
         "name": cfg["name"],
+        "terrain": terrain_id,
+        "labels": cfg.get("labels", ("START", "FINISH")),
         "width": int(Wc),
         "height": int(Hc),
         "cellSize": round(cell, 4),

@@ -5,7 +5,8 @@ import { buildCourse } from './course.js';
 import { Rider } from './rider.js';
 import { Sound } from './audio.js';
 
-const COURSE_ID = new URLSearchParams(location.search).get('course') || 'whistler';
+// Pick a run with #whistler or ?course=whistler; Peak to Creek by default.
+const COURSE_ID = location.hash.slice(1) || new URLSearchParams(location.search).get('course') || 'peak-to-creek';
 const $ = id => document.getElementById(id);
 
 // ---------- Renderer, scene, camera ----------
@@ -18,7 +19,7 @@ const SKY = new THREE.Color(0xc9def2);
 scene.background = SKY;
 scene.fog = new THREE.Fog(SKY, 250, 1400);
 // Nothing past the fog is drawn, which keeps phones fast.
-const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1700);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1700);
 
 scene.add(new THREE.HemisphereLight(0xd6e6ff, 0x8c9fc4, 1.25));
 const sun = new THREE.DirectionalLight(0xfff1dc, 1.6);
@@ -207,6 +208,7 @@ function restart() {
 
 function begin() {
   sound.start();
+  document.activeElement?.blur();
   $('intro').hidden = true;
   if (game.state === 'finished') restart();
   game.state = 'playing';
@@ -225,8 +227,8 @@ function updateCamera(dt, snap = false) {
   const want = hs > 2 ? new THREE.Vector3(v.x / hs, 0, v.z / hs) : rider.forward();
   camDir.lerp(want, snap ? 1 : 1 - Math.exp(-2.5 * dt)).normalize();
   const speed = v.length();
-  const dist = 7 + Math.min(speed, 40) * 0.07;
-  const height = 2.8 + Math.min(speed, 40) * 0.03;
+  const dist = 6.5 + Math.min(speed, 40) * 0.06;
+  const height = 2.4 + Math.min(speed, 40) * 0.025;
   const desired = new THREE.Vector3(p.x - camDir.x * dist, p.y + height, p.z - camDir.z * dist);
   const floor = terrain.groundHeight(desired.x, desired.z) + 1.4;
   if (desired.y < floor) desired.y = floor;
@@ -236,7 +238,8 @@ function updateCamera(dt, snap = false) {
   if (camera.position.y < gMin) camera.position.y = gMin;
   camTarget.set(p.x + camDir.x * 5, p.y + 1.1, p.z + camDir.z * 5);
   camera.lookAt(camTarget);
-  const fov = 68 + Math.min(20, speed * 0.45);
+  // A narrow lens keeps slopes looking as steep as they are; a wide one flattens them.
+  const fov = 55 + Math.min(10, speed * 0.25);
   if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
   sky.position.copy(camera.position);
 }
@@ -346,6 +349,9 @@ async function init() {
     throw err;
   }
   $('course-name').textContent = terrain.meta.name;
+  const pick = $('course-pick');
+  pick.value = COURSE_ID;
+  pick.addEventListener('change', () => { location.hash = pick.value; location.reload(); });
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: snowTexture() });
   scene.add(terrain.buildMesh(snowColor, mat));
   course = buildCourse(terrain, scene);

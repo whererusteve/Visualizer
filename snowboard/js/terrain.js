@@ -3,10 +3,9 @@
 import * as THREE from '../vendor/three.module.min.js';
 
 export async function loadTerrain(id) {
-  const [meta, blob] = await Promise.all([
-    fetch(`data/${id}.json`).then(r => r.json()),
-    fetch(`data/${id}.png`).then(r => r.blob()),
-  ]);
+  const meta = await fetch(`data/${id}.json`).then(r => r.json());
+  // Several courses can share one mountain's height map.
+  const blob = await fetch(`data/${meta.terrain || id}.png`).then(r => r.blob());
   // Heights are packed in the PNG's red (high byte) and green (low byte).
   const img = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
   const canvas = document.createElement('canvas');
