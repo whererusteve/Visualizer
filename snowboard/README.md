@@ -3,15 +3,14 @@
 A snowboarding game on real mountains, in the spirit of the 3D stages in Sonic 3:
 fast, behind-the-back, collect stars and hit jumps. Two runs on real Whistler terrain:
 
-- **Peak to Creek** (default): Whistler Peak (2,175 m) to Creekside (~670 m), 5.8 km,
-  1,507 m vertical. It traverses southwest off the peak around West Cirque, like Highway 86,
-  then takes the long west side down through the trees.
-- **Peak to Village**: straight down the north ridge, 6.3 km. Open with `#whistler`.
+- **Peak to Creek** (default): from the top of the Peak Express (2,175 m) along Peak to Creek
+  Road, then Upper and Lower Peak to Creek to Creekside (~670 m): 5.6 km, 1,508 m vertical.
+- **Peak to Village**: a computed line straight down the north ridge, 6.3 km. Open with `#whistler`.
 
-The Peak to Creek line follows guide points placed on the terrain from published
-descriptions, not a surveyed trail line (OpenStreetMap couldn't be reached when it was
-built). The real run is longer (7–11 km depending on the source) because it uses more
-traverses.
+The Peak to Creek line is the real run, traced from OpenStreetMap ski-run data
+(© OpenStreetMap contributors) shown on CalTopo. The screenshots were lined up with the
+elevation data by matching their contour lines, and the traced points are saved in
+`tools/traces/peak-to-creek.json`.
 
 Scoring isn't in yet; this version is about the riding and the physics.
 
@@ -45,7 +44,8 @@ The guide line is a shortest-path search that prefers 12–30° slopes, avoids c
 won't go uphill, so it lands on terrain a real rider would choose. Stars, jumps and the
 cleared run through the forest are placed along it when the game loads.
 
-To add a mountain, add an entry to `COURSES` in the script (bounds, start, finish) and run
+To add a run, add an entry to `COURSES` in the script, either with a start and finish (the line is
+computed) or with a `trace` file of real lat/lon points, and run
 `python3 tools/build_course.py <id>`, then open `/snowboard/#<id>`.
 
 ## Files

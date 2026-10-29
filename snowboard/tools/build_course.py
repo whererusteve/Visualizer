@@ -44,24 +44,13 @@ COURSES = {
         "labels": ("WHISTLER PEAK", "VILLAGE"),
     },
     # Peak to Creek: Whistler's longest run, down the west side to Creekside.
-    # OpenStreetMap was not reachable when this was built, so the line is
-    # steered through guide points placed on the real terrain (published
-    # facts: starts at the Peak Express, ~1,500 m vertical, ends at Creekside).
+    # The line is traced from OpenStreetMap run data (see tools/traces/).
     "peak-to-creek": {
         "name": "Whistler — Peak to Creek",
         "terrain": "whistler",  # same mountain data as above
-        "start": (50.0592, -122.9569),
-        "via": [
-            (50.05817, -122.96294),  # traverse southwest off the peak, around West Cirque (~2,060 m)
-            (50.05784, -122.97238),  # end of the shoulder (~1,840 m)
-            (50.07305, -122.97067),  # upper/lower split, near treeline (~1,480 m)
-            (50.08186, -122.97753),  # lower run in the trees (~1,040 m)
-            (50.08847, -122.98268),  # above Creekside (~840 m)
-        ],
-        "finish": (50.0934, -122.9878),  # Creekside base
+        "trace": "traces/peak-to-creek.json",
+        "routeSource": "OpenStreetMap ski-run data (© OpenStreetMap contributors), via CalTopo",
         "labels": ("PEAK TO CREEK", "CREEKSIDE"),
-        # Published: ~1,500 m vertical over 7-11 km, so about 8-12 degrees.
-        "grade": 0.2,
     },
 }
 
@@ -200,6 +189,18 @@ def main(course_id):
         x, y = tile_xy(lat, lon, z)
         return int(round((y - fy0) * 256 / ds)), int(round((x - fx0) * 256 / ds))
 
+    if "trace" in cfg:
+        with open(os.path.join(HERE, cfg["trace"])) as f:
+            pts = json.load(f)["points"]
+        def to_cellf(lat, lon):
+            x, y = tile_xy(lat, lon, z)
+            return ((x - fx0) * 256 / ds, (y - fy0) * 256 / ds)
+        path = [to_cellf(lat, lon) for lat, lon in pts]
+        route = smooth_and_resample(path, cell, window=4)
+        sy, sx = int(path[0][1]), int(path[0][0])
+        fy, fx = int(path[-1][1]), int(path[-1][0])
+        write_course(course_id, cfg, terrain_id, h, cell, north, route, (sy, sx), (fy, fx), Wc, Hc)
+        return
     sy, sx = to_cell(*cfg["start"])
     fy, fx = to_cell(*cfg["finish"])
     # Snap start to the highest nearby cell and finish to the lowest.
@@ -214,6 +215,10 @@ def main(course_id):
         path += leg if not path else leg[1:]
     route = smooth_and_resample(path, cell)
 
+    write_course(course_id, cfg, terrain_id, h, cell, north, route, (sy, sx), (fy, fx), Wc, Hc)
+
+def write_course(course_id, cfg, terrain_id, h, cell, north, route, start, finish, Wc, Hc):
+    (sy, sx), (fy, fx) = start, finish
     os.makedirs(OUT, exist_ok=True)
     dm = np.clip(np.round(h * 10), 0, 65535).astype("<u2")
     rgb = np.zeros((Hc, Wc, 3), np.uint8)
@@ -235,6 +240,7 @@ def main(course_id):
                   "Includes SRTM, NED, CDEM and other public datasets.",
         "bounds": {"north": north, "west": cfg["bounds"][1],
                    "south": cfg["bounds"][2], "east": cfg["bounds"][3]},
+        "routeSource": cfg.get("routeSource", "Computed from the terrain"),
         "route": [[round(float(x), 1), round(float(y), 1)] for x, y in route],
     }
     with open(os.path.join(OUT, f"{course_id}.json"), "w") as f:
@@ -243,6 +249,7 @@ def main(course_id):
     print(f"{course_id}: {Wc}x{Hc} cells of {cell:.1f} m, "
           f"{h.min():.0f}-{h.max():.0f} m, route {length / 1000:.1f} km, "
           f"drop {h[sy, sx] - h[fy, fx]:.0f} m")
+
 
 
 if __name__ == "__main__":
