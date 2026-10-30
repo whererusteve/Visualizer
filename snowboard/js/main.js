@@ -201,6 +201,7 @@ function restart() {
   rider.place(s.x, s.z, dx / d, dz / d, 0);
   course.stars.forEach(st => { st.got = -1; });
   game.stars = 0; game.time = 0; game.routeIndex = 0;
+  havePrev = false;
   $('finish').hidden = true;
   if (game.state === 'finished') game.state = 'playing';
   snapCamera();
@@ -248,14 +249,26 @@ function updateCamera(dt, snap = false) {
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _v = new THREE.Vector3();
 const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
 const _yAxis = new THREE.Vector3(0, 1, 0);
+// Where the rider's body was last frame. Stars are collected anywhere along the
+// path between then and now, so fast riders on slow phones don't skip past them.
+const bodyNow = new THREE.Vector3(), bodyPrev = new THREE.Vector3();
+let havePrev = false;
+const STAR_REACH = 2.5;
+function distToPath(st, a, b) {
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const len2 = abx * abx + aby * aby + abz * abz;
+  let t = len2 > 0 ? ((st.x - a.x) * abx + (st.y - a.y) * aby + (st.z - a.z) * abz) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(a.x + abx * t - st.x, a.y + aby * t - st.y, a.z + abz * t - st.z);
+}
 function updateStars(now) {
-  const c = _v.copy(rider.p).addScaledVector(rider.n, 0.9);
+  bodyNow.copy(rider.p).addScaledVector(rider.n, 0.9);
+  if (!havePrev) { bodyPrev.copy(bodyNow); havePrev = true; }
   const mesh = course.starMesh;
   _q.setFromAxisAngle(_yAxis, now * 3);
   course.stars.forEach((st, i) => {
     if (st.got < 0 && rider.crashed <= 0 && game.state === 'playing') {
-      const d2 = (st.x - c.x) ** 2 + (st.y - c.y) ** 2 + (st.z - c.z) ** 2;
-      if (d2 < 2.5 * 2.5) {
+      if (distToPath(st, bodyPrev, bodyNow) < STAR_REACH) {
         st.got = now;
         game.stars++;
         sound.star();
@@ -273,6 +286,7 @@ function updateStars(now) {
     mesh.setMatrixAt(i, _m);
   });
   mesh.instanceMatrix.needsUpdate = true;
+  bodyPrev.copy(bodyNow);
 }
 
 // ---------- HUD ----------

@@ -27,6 +27,7 @@ export class Rider {
   constructor(terrain, scene) {
     this.terrain = terrain;
     this.p = new THREE.Vector3();
+    this.lastSafe = new THREE.Vector3();
     this.v = new THREE.Vector3();
     this.yaw = 0;
     this.n = new THREE.Vector3(0, 1, 0);
@@ -132,6 +133,7 @@ export class Rider {
 
     if (gap > 0.3) this.airTime += dt;
 
+    this.lastSafe.copy(p);
     p.addScaledVector(v, dt);
 
     // Keep inside the map.
@@ -194,6 +196,13 @@ export class Rider {
 
   // Bump into trees.
   checkTrees(course) {
+    // Buildings: step back out and wipe out (unless already down).
+    if (course.buildings.hit(this.p.x, this.p.z, this.p.y, 0.4)) {
+      this.p.copy(this.lastSafe);
+      this.v.multiplyScalar(this.crashed > 0 ? 0 : 0.1);
+      if (this.crashed <= 0) this.crash();
+      return;
+    }
     if (this.crashed > 0) return;
     for (const t of course.treesNear(this.p.x, this.p.z)) {
       const dx = this.p.x - t.x, dz = this.p.z - t.z;

@@ -10,7 +10,9 @@ fast, behind-the-back, collect stars and hit jumps. Two runs on real Whistler te
 The Peak to Creek line is the real run, traced from OpenStreetMap ski-run data
 (© OpenStreetMap contributors) shown on CalTopo. The screenshots were lined up with the
 elevation data by matching their contour lines, and the traced points are saved in
-`tools/traces/peak-to-creek.json`.
+`tools/traces/peak-to-creek.json`. The 142 buildings around Creekside and Kadenwood come from
+the same source (`tools/traces/creekside-buildings.json`): small footprints become chalets with
+pitched roofs, big ones keep their real outline with a snowy flat roof.
 
 Scoring isn't in yet; this version is about the riding and the physics.
 
@@ -56,6 +58,7 @@ css/game.css        look of the HUD and menus
 js/main.js          scene, camera, controls, game loop
 js/terrain.js       height lookups and the terrain mesh
 js/course.js        stars, jumps, trees, gates (LAYOUT numbers at the top)
+js/buildings.js     Creekside and Kadenwood buildings from real footprints
 js/rider.js         snowboard physics (PHYSICS numbers at the top) and the rider model
 js/audio.js         synthesized sounds (no audio files)
 tools/build_course.py   real elevation data → course files

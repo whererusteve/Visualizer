@@ -49,6 +49,7 @@ COURSES = {
         "name": "Whistler — Peak to Creek",
         "terrain": "whistler",  # same mountain data as above
         "trace": "traces/peak-to-creek.json",
+        "buildings": "traces/creekside-buildings.json",
         "routeSource": "OpenStreetMap ski-run data (© OpenStreetMap contributors), via CalTopo",
         "labels": ("PEAK TO CREEK", "CREEKSIDE"),
     },
@@ -199,6 +200,13 @@ def main(course_id):
         route = smooth_and_resample(path, cell, window=4)
         sy, sx = int(path[0][1]), int(path[0][0])
         fy, fx = int(path[-1][1]), int(path[-1][0])
+        if "buildings" in cfg:
+            with open(os.path.join(HERE, cfg["buildings"])) as f:
+                blds = json.load(f)["buildings"]
+            cfg["buildingData"] = [
+                {"area": bd["area"],
+                 "points": [[round(c * cell, 1) for c in to_cellf(lat, lon)] for lat, lon in bd["points"]]}
+                for bd in blds]
         write_course(course_id, cfg, terrain_id, h, cell, north, route, (sy, sx), (fy, fx), Wc, Hc)
         return
     sy, sx = to_cell(*cfg["start"])
@@ -241,6 +249,7 @@ def write_course(course_id, cfg, terrain_id, h, cell, north, route, start, finis
         "bounds": {"north": north, "west": cfg["bounds"][1],
                    "south": cfg["bounds"][2], "east": cfg["bounds"][3]},
         "routeSource": cfg.get("routeSource", "Computed from the terrain"),
+        "buildings": cfg.get("buildingData", []),
         "route": [[round(float(x), 1), round(float(y), 1)] for x, y in route],
     }
     with open(os.path.join(OUT, f"{course_id}.json"), "w") as f:

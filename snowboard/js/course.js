@@ -3,6 +3,7 @@
 // found down the real mountain. Change the numbers in LAYOUT to reshape the
 // course without touching the physics.
 import * as THREE from '../vendor/three.module.min.js';
+import { buildBuildings } from './buildings.js';
 
 export const LAYOUT = {
   starEvery: 85,        // metres between star patterns
@@ -250,7 +251,7 @@ function boundaryPoles(terrain, route) {
   return mesh;
 }
 
-function placeTrees(terrain, route, rand) {
+function placeTrees(terrain, route, rand, buildings) {
   const trees = [];
   const step = LAYOUT.treeSpacing;
   const samples = [];
@@ -276,6 +277,7 @@ function placeTrees(terrain, route, rand) {
       const line = LAYOUT.treeline + Math.sin(tx / 90) * 50 + Math.cos(tz / 120) * 40;
       if (elev > line) continue;
       if (terrain.slopeDegrees(tx, tz) > 40) continue;
+      if (!buildings.clear(tx, tz)) continue;
       // Thin the forest near the treeline and in random glades.
       const thin = Math.min(1, (line - elev) / 150);
       if (rand() > 0.35 + 0.6 * thin) continue;
@@ -346,13 +348,15 @@ export function buildCourse(terrain, scene) {
   }
 
   route.kickerS = kickers.map(k => k.s);
-  const stars = placeStars(terrain, route, kickers, rand);
+  const buildings = buildBuildings(terrain, scene);
+  const stars = placeStars(terrain, route, kickers, rand)
+    .filter(st => !buildings.hit(st.x, st.z, st.y, 2));
   const starMesh = new THREE.InstancedMesh(starGeometry(),
     new THREE.MeshLambertMaterial({ color: 0xffd23a, emissive: 0x6b4a00 }), stars.length);
   starMesh.frustumCulled = false;
   scene.add(starMesh);
 
-  const trees = placeTrees(terrain, route, rand);
+  const trees = placeTrees(terrain, route, rand, buildings);
   // Trees are drawn in patches so patches out of view are skipped.
   const treeGeo = treeGeometry();
   const treeMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -385,7 +389,7 @@ export function buildCourse(terrain, scene) {
   scene.add(gate(terrain, route.at(route.length - 25), endLabel, '#dc2626'));
 
   return {
-    route, kickers, stars, starMesh, trees, start, end,
+    route, kickers, stars, starMesh, trees, buildings, start, end,
     treesNear(x, z) {
       const out = [];
       const ci = Math.floor(x / 10), cj = Math.floor(z / 10);
