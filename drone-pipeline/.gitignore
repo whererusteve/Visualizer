@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+# Never commit real project data or personal settings
+Projects/
+config.local.toml

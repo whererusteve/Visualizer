@@ -1,0 +1,10 @@
+# The only three packages this pipeline needs.
+# Install them with:   pip install -r requirements.txt
+#
+# requests  - talks to WebODM over HTTP (its REST API)
+# Pillow    - reads the EXIF data inside your photos
+# rasterio  - reads/writes GeoTIFFs (checks the coordinate system, does DSM differencing).
+#             It bundles GDAL, so you do NOT need to install GDAL separately.
+requests>=2.31
+Pillow>=10.0
+rasterio>=1.3
