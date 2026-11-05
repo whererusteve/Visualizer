@@ -6,6 +6,7 @@ import {
   fetchWindField, fetchLocal, fetchLocalTide, fetchTideStations, fetchQuakes, fetchKp,
   sampleSeries, kpAt,
 } from './data.js';
+import { computeResonance, resonanceAt } from './resonance.js';
 
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
@@ -13,6 +14,8 @@ const DAY = 24 * HOUR;
 // ---------- Layer catalogue ----------
 // `hear` is the plain-language description of each sound mapping shown in the UI.
 const LAYERS = [
+  { id: 'resonance', name: 'Resonance', color: 'var(--reso)', sound: true,
+    hear: 'Each rhythm hums its own note as it nears a peak, slightly out of tune. When two or more peak together the wobble stops and they ring as one pure chord — and the rings on the map merge and glow.' },
   { id: 'daynight', name: 'Day & night', color: 'var(--sun)', sound: true,
     hear: 'An open, bright chord that rises with the sun; a low, dark drone after dusk.' },
   { id: 'moon', name: 'Moon', color: 'var(--moon)', sound: true,
@@ -85,7 +88,7 @@ function buildLayerList() {
       b.addEventListener('click', () => {
         state.layers[l.id][kind] = !state.layers[l.id][kind];
         b.setAttribute('aria-pressed', String(state.layers[l.id][kind]));
-        if (kind === 'show') timeline.layout(state);
+        if (kind === 'show') { timeline.layout(state); markDirty(); }
         savePrefs();
       });
     });
@@ -115,7 +118,7 @@ async function load(key, fn, after) {
     state.status[key] = e.message?.slice(0, 60) || 'error';
   }
   renderSources();
-  if (timeline) timeline.dirty = true;
+  if (timeline) markDirty();
 }
 
 function loadLocal() {
@@ -156,7 +159,7 @@ function setLocation(lat, lon, name) {
   updatePlace();
   savePrefs();
   loadLocal();
-  timeline.dirty = true;
+  markDirty();
 }
 
 function updatePlace() {
@@ -240,6 +243,14 @@ function scrub(t, jump) {
   state.t = t;
 }
 
+// ---------- Resonance ----------
+// Peak moments only need recomputing when data, place, window or layers change.
+let resoDirty = true;
+function markDirty() {
+  resoDirty = true;
+  if (timeline) timeline.dirty = true;
+}
+
 // ---------- Quakes ----------
 function triggerQuake(q) {
   if (state.layers.quakes.show) map.addRipple(q.lat, q.lon, q.mag);
@@ -272,6 +283,7 @@ function sample() {
     kp: kpAt(state.data.kp, t),
     sound: Object.fromEntries(LAYERS.map((l) => [l.id, state.layers[l.id].sound])),
     speed: state.mode === 'play' ? state.speed : 1,
+    reso: state.resoNow,
   };
   const d = state.data.local;
   if (d) {
@@ -307,6 +319,15 @@ function updateReadouts(s) {
     const big = recent.reduce((m, q) => (q.mag > (m?.mag ?? 0) ? q : m), null);
     set('quakes', `${recent.length} in past 24 h${big ? ` · largest M${big.mag.toFixed(1)}` : ''}`);
   } else set('quakes', state.status.quakes === 'loading' ? 'loading…' : '—');
+  const rn = state.resoNow;
+  if (rn && rn.R > 0.35 && rn.aligned.length >= 2) {
+    set('resonance', `Resonating · ${rn.aligned.slice(0, 3).map((e) => e.label).join(' + ')}`);
+  } else {
+    const next = state.reso?.moments.find((m) => m.t > state.t);
+    set('resonance', next
+      ? `Next: ${new Date(next.t + state.utcOffset * 1000).toLocaleString(undefined, { timeZone: 'UTC', weekday: 'short', hour: '2-digit', minute: '2-digit' })} · ${next.events.map((e) => e.label).join(' + ')}`
+      : 'No alignments in view');
+  }
   set('aurora', s.kp != null ? `Kp ${s.kp.toFixed(1)} · ${s.kp >= 5 ? 'storm' : s.kp >= 4 ? 'active' : 'quiet'}` : '—');
 
   const fmt = (ms, opts) => new Date(ms).toLocaleString(undefined, { timeZone: 'UTC', ...opts });
@@ -359,6 +380,8 @@ function frame(nowPerf) {
     if (state.t > state.t1) { state.t = state.t0; lastT = state.t; audio.transition(); }
   }
   state.kpNow = kpAt(state.data.kp, state.t);
+  if (resoDirty) { state.reso = computeResonance(state); resoDirty = false; timeline.dirty = true; }
+  state.resoNow = resonanceAt(state.reso.events, state.t);
   checkQuakeCrossings();
   map.setWindTime(state.data.wind, state.t);
   map.draw(state, dt);
@@ -410,7 +433,7 @@ async function boot() {
     const n = Date.now();
     state.t0 = timeline.t0 = n - 2 * DAY;
     state.t1 = timeline.t1 = n + 3 * DAY;
-    timeline.dirty = true;
+    markDirty();
   }, HOUR);
 
   requestAnimationFrame(frame);

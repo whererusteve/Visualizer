@@ -2,6 +2,8 @@
 // loudness, brightness or pitch follows one data value. Earthquakes are struck bells.
 // All pitches sit in D major pentatonic so the layers never clash.
 
+import { RHYTHMS, D2 } from './resonance.js';
+
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
 
@@ -188,6 +190,22 @@ export class Sonifier {
     sweep.connect(sweepDepth).connect(auroraFilter.frequency);
     sweep.start();
 
+    // --- Resonance: one note of the harmonic series per rhythm. Each note is a pair
+    // of oscillators; while the twin is slightly out of tune the pair "beats"
+    // (a slow wobble). When rhythms line up the twin slides into tune and the
+    // notes ring together as one pure chord.
+    this.resoGain = voiceOut(1.1);
+    this.resoPartials = {};
+    Object.entries(RHYTHMS).forEach(([r, def], i) => {
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      g.connect(this.resoGain);
+      const f = D2 * def.partial;
+      osc('sine', f, g);
+      const twin = osc('sine', f, g);
+      this.resoPartials[r] = { g, twin, sign: i % 2 ? 1 : -1, partial: def.partial };
+    });
+
     // Quake bells feed this bus
     this.quakeBus = voiceOut(0.8);
     this.quakeBus.gain.value = 1;
@@ -265,6 +283,18 @@ export class Sonifier {
     // Moon
     const moonUp = smooth(-4, 10, s.moonAlt);
     this.moonGain.gain.setTargetAtTime(on('moon') ? 0.012 * (0.15 + s.moonFraction) * (0.25 + 0.75 * moonUp) : 0, now, tc);
+
+    // Resonance chord
+    const reso = s.reso;
+    if (reso && on('resonance')) {
+      this.resoGain.gain.setTargetAtTime(0.9 + 0.6 * reso.R, now, tc);
+      const out = Math.pow(1 - reso.R, 1.5) * 30; // cents out of tune
+      for (const [r, v] of Object.entries(this.resoPartials)) {
+        const p = s.sound[RHYTHMS[r].layer] ? (reso.p[r] ?? 0) : 0;
+        v.g.gain.setTargetAtTime((0.045 * Math.pow(p, 1.3) * (0.45 + 0.55 * reso.R)) / Math.sqrt(v.partial / 2), now, tc);
+        v.twin.detune.setTargetAtTime(v.sign * out, now, tc);
+      }
+    } else this.resoGain.gain.setTargetAtTime(0, now, tc);
 
     // Aurora: silent below Kp 3, full by Kp 7
     const k = s.kp == null ? 0 : smooth(2.5, 7, s.kp);

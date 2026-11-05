@@ -1,6 +1,7 @@
 // World map renderer (equirectangular projection, centred on the listening point).
 import { subSolar, subLunar, altitudeFrom, geomagneticLat, auroraEdge, moonIllumination } from './astro.js';
 import { WIND_GRID, sampleSeries } from './data.js';
+import { RHYTHMS } from './resonance.js';
 
 const SHADE_W = 360;
 const SHADE_H = 180;
@@ -21,6 +22,10 @@ export class EarthMap {
     this.particles = [];
     this.windNow = null;
     this.ripples = [];
+    this.resoRipples = [];
+    this.lastResoPulse = 0;
+    const css = getComputedStyle(document.documentElement);
+    this.rcolors = Object.fromEntries(Object.entries(RHYTHMS).map(([k, d]) => [k, css.getPropertyValue(d.color).trim() || '#fff']));
     // Geomagnetic latitude per shade pixel never changes, so compute it once.
     this.gmLat = new Float32Array(SHADE_W * SHADE_H);
     this.sinLat = new Float32Array(SHADE_H);
@@ -305,6 +310,8 @@ export class EarthMap {
       drawMoon(c, x, y, 7, moonIllumination(state.t).phase);
     }
 
+    if (L.resonance.show && state.resoNow) this.drawResonance(state);
+
     // Listening point
     const [lx, ly] = this.project(state.loc.lat, state.loc.lon);
     c.strokeStyle = '#fff'; c.lineWidth = 1.5;
@@ -313,6 +320,81 @@ export class EarthMap {
     c.moveTo(lx, ly - 11); c.lineTo(lx, ly - 7); c.moveTo(lx, ly + 7); c.lineTo(lx, ly + 11); c.stroke();
   }
 }
+
+// Resonance rings at the listening point. Each rhythm nearing a peak draws its own
+// coloured ring. Out of step, the rings sit apart and wobble at the same rate as
+// the beating you hear. As rhythms line up the wobble stops, the rings merge into
+// one bright circle and it sends out ripples.
+EarthMap.prototype.drawResonance = function drawResonance(state) {
+  const { p, R, aligned } = state.resoNow;
+  const keys = Object.keys(p).filter((k) => p[k] > 0.05 && state.layers[RHYTHMS[k].layer].show);
+  const c = this.ctx;
+  const [x, y] = this.project(state.loc.lat, state.loc.lon);
+  const ui = this.ui;
+  const now = performance.now();
+  const secs = now / 1000;
+  const sumP = keys.reduce((a, k) => a + p[k], 0);
+  const base = (13 + 6 * Math.min(2, sumP) + 6 * R) * ui;
+  const out = Math.pow(1 - R, 1.5);
+  const beatHz = 220 * (Math.pow(2, (out * 30) / 1200) - 1); // same wobble rate as the audio
+  c.save();
+
+  if (R > 0.02) {
+    const g = c.createRadialGradient(x, y, 0, x, y, base * 3.2);
+    g.addColorStop(0, `rgba(255,244,214,${0.55 * R})`);
+    g.addColorStop(0.35, `rgba(255,230,180,${0.22 * R})`);
+    g.addColorStop(1, 'rgba(255,230,180,0)');
+    c.fillStyle = g;
+    c.beginPath(); c.arc(x, y, base * 3.2, 0, Math.PI * 2); c.fill();
+  }
+
+  keys.sort((a, b) => RHYTHMS[a].partial - RHYTHMS[b].partial).forEach((k, i) => {
+    const radius = base + (i - (keys.length - 1) / 2) * 5 * ui * out;
+    const wob = 5 * ui * out * p[k];
+    const lobes = 2 + RHYTHMS[k].partial;
+    const phase = secs * beatHz * Math.PI * 2 * (i % 2 ? 1 : -1) / lobes;
+    c.globalAlpha = Math.min(1, 0.2 + 0.7 * p[k] + 0.3 * R);
+    c.strokeStyle = this.rcolors[k];
+    c.lineWidth = (1 + 1.5 * p[k] + R) * ui;
+    c.beginPath();
+    for (let a = 0; a <= 64; a++) {
+      const th = (a / 64) * Math.PI * 2;
+      const rr = radius + wob * Math.sin(lobes * th + phase);
+      const px = x + rr * Math.cos(th);
+      const py = y + rr * Math.sin(th);
+      if (a) c.lineTo(px, py); else c.moveTo(px, py);
+    }
+    c.stroke();
+  });
+
+  // Ripples while resonating
+  if (R > 0.5 && now - this.lastResoPulse > 1400 - 600 * R) {
+    this.resoRipples.push({ born: now, R });
+    this.lastResoPulse = now;
+  }
+  this.resoRipples = this.resoRipples.filter((rp) => now - rp.born < 2600);
+  for (const rp of this.resoRipples) {
+    const k = (now - rp.born) / 2600;
+    c.globalAlpha = (1 - k) * 0.7 * rp.R;
+    c.strokeStyle = '#fff4d6';
+    c.lineWidth = 1.5 * ui;
+    c.beginPath(); c.arc(x, y, base + k * 70 * ui, 0, Math.PI * 2); c.stroke();
+  }
+
+  if (R > 0.35 && aligned.length >= 2) {
+    c.globalAlpha = Math.min(1, R * 1.4);
+    c.font = `600 ${Math.round(12 * Math.max(0.85, ui))}px system-ui, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'bottom';
+    const label = aligned.slice(0, 3).map((e) => e.label).join(' · ');
+    const ty = y - base - 10 * ui < 14 ? y + base + 22 * ui : y - base - 8 * ui;
+    c.lineWidth = 3; c.strokeStyle = 'rgba(7,11,20,0.85)';
+    c.strokeText(label, x, ty);
+    c.fillStyle = '#fff4d6';
+    c.fillText(label, x, ty);
+  }
+  c.restore();
+};
 
 // Little moon glyph with the right phase (lit part on the right while waxing).
 export function drawMoon(c, x, y, r, phase) {

@@ -2,6 +2,7 @@
 // can be compared by eye. Drag anywhere on it to scrub through time.
 import { sunAltitude, moonAltitude, moonIllumination } from './astro.js';
 import { sampleSeries } from './data.js';
+import { resonanceAt, RHYTHMS } from './resonance.js';
 
 const HOUR = 3600000;
 
@@ -28,6 +29,7 @@ export class Timeline {
   layout(state) {
     const L = state.layers;
     const lanes = [];
+    if (L.resonance.show) lanes.push('reso');
     if (L.daynight.show) lanes.push('sun');
     if (L.moon.show) lanes.push('moon');
     if (L.tides.show) lanes.push('tide');
@@ -82,6 +84,26 @@ export class Timeline {
 
     this.lanes.forEach((lane, i) => {
       const y0 = 20 + i * laneH;
+      if (lane === 'reso') {
+        const y1r = y0 + laneH - 4;
+        c.fillStyle = col('--lane');
+        c.fillRect(left, y0, W - left, laneH - 4);
+        c.fillStyle = col('--text');
+        c.textBaseline = 'middle';
+        c.fillText(LANE_LABEL.reso, 6, (y0 + y1r) / 2);
+        c.textBaseline = 'top';
+        const events = state.reso?.events || [];
+        // Glowing column whose height and brightness follow resonance strength
+        for (let k = 1; k <= N; k++) {
+          const R = resonanceAt(events, ts[k]).R;
+          if (R < 0.02) continue;
+          const xa = this.x(ts[k - 1]);
+          const h = R * (y1r - y0);
+          c.fillStyle = `rgba(255,236,190,${0.15 + 0.75 * R})`;
+          c.fillRect(xa, y1r - h, this.x(ts[k]) - xa + 0.6, h);
+        }
+        return;
+      }
       const y1 = y0 + laneH - 4;
       c.fillStyle = col('--lane');
       c.fillRect(left, y0, W - left, laneH - 4);
@@ -163,7 +185,43 @@ export class Timeline {
         }
       }
     });
+    this.drawAlignments(state);
     this.dirty = false;
+  }
+
+  // A dot on each lane at every peak moment, and a glowing line joining peaks
+  // that land together. The more rhythms in a moment, the brighter the line.
+  drawAlignments(state) {
+    if (!state.reso) return;
+    const c = this.static.getContext('2d');
+    const { laneH } = this;
+    const css = getComputedStyle(document.documentElement);
+    const laneMid = (r) => { const i = this.lanes.indexOf(r); return i < 0 ? null : 20 + i * laneH + (laneH - 4) / 2; };
+    const resoLane = this.lanes.indexOf('reso');
+    for (const m of state.reso.moments) {
+      const ys = m.events.map((e) => laneMid(e.r)).filter((v) => v != null);
+      if (ys.length < 2) continue;
+      const x = this.x(m.t);
+      const top = resoLane >= 0 ? 20 + resoLane * laneH : Math.min(...ys);
+      const strength = m.events.length >= 3 ? 1 : 0.25;
+      const g = c.createLinearGradient(x - 6, 0, x + 6, 0);
+      g.addColorStop(0, 'rgba(255,236,190,0)');
+      g.addColorStop(0.5, `rgba(255,236,190,${0.18 + 0.3 * strength})`);
+      g.addColorStop(1, 'rgba(255,236,190,0)');
+      c.fillStyle = g;
+      c.fillRect(x - 6, top, 12, Math.max(...ys) - top + 4);
+      c.strokeStyle = `rgba(255,244,214,${0.3 + 0.7 * strength})`;
+      c.lineWidth = 0.8 + 1.4 * strength;
+      c.beginPath(); c.moveTo(x, top); c.lineTo(x, Math.max(...ys)); c.stroke();
+    }
+    for (const e of state.reso.events) {
+      const y = laneMid(e.r);
+      if (y == null) continue;
+      c.fillStyle = css.getPropertyValue(RHYTHMS[e.r].color).trim();
+      c.strokeStyle = 'rgba(7,11,20,0.9)';
+      c.lineWidth = 1.5;
+      c.beginPath(); c.arc(this.x(e.t), y, 3, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
   }
 
   draw(state) {
@@ -183,5 +241,5 @@ export class Timeline {
 }
 
 const LANE_LABEL = {
-  sun: 'Sun', moon: 'Moon', tide: 'Tide', wind: 'Wind', temp: 'Temp', kp: 'Kp', quakes: 'Quakes',
+  reso: 'Resonance', sun: 'Sun', moon: 'Moon', tide: 'Tide', wind: 'Wind', temp: 'Temp', kp: 'Kp', quakes: 'Quakes',
 };
