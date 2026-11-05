@@ -214,6 +214,16 @@ export class Rider {
       return;
     }
     if (this.crashed > 0) return;
+    // Lift stations
+    for (const k of course.lifts.keepClear) {
+      const dx = this.p.x - k.x, dz = this.p.z - k.z;
+      if (dx * dx + dz * dz < k.r * k.r && this.p.y < k.top) {
+        this.p.copy(this.lastSafe);
+        this.v.multiplyScalar(0.1);
+        this.crash();
+        return;
+      }
+    }
     for (const t of course.treesNear(this.p.x, this.p.z)) {
       const dx = this.p.x - t.x, dz = this.p.z - t.z;
       const r = 0.55 + 0.9 * t.scale;

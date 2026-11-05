@@ -62,6 +62,7 @@ COURSES = {
         "mountain": "whistler",
         "mode": "free",
         "buildings": "traces/creekside-buildings.json",
+        "liftSpawns": True,   # also drop in at the top of every lift
         # Drop-in spots. The Peak and the two bases are exact; the others are
         # approximate (high points found in the elevation data, or on the line
         # of the Village Gondola at Olympic's ~1,020 m).
@@ -399,10 +400,28 @@ def build_course(cid):
                 buildings.append({"area": b["area"], "points": [
                     [round(v, 1) for v in grid.to_xz(lat, lon)] for lat, lon in b["points"]]})
 
+    lifts = []
+    with open(os.path.join(HERE, "traces/lifts.json")) as f:
+        for lf in json.load(f)["lifts"]:
+            st = []
+            for p in lf["stations"]:
+                x, z = grid.to_xz(p["lat"], p["lon"])
+                # keep only stations on the map (Peak 2 Peak runs off it to Blackcomb)
+                st.append({"name": p["name"], "x": round(x, 1), "z": round(z, 1)})
+            lifts.append({"name": lf["name"], "type": lf["type"], "stations": st})
+
     spawns = []
     for name, lat, lon in cfg.get("spawns", []):
         x, z = grid.to_xz(lat, lon)
         spawns.append({"name": name, "x": round(x, 1), "z": round(z, 1)})
+
+    if cfg.get("liftSpawns"):
+        have = {s["name"] for s in spawns}
+        for lf in lifts:
+            top = lf["stations"][-1]
+            inside = 0 <= top["x"] <= grid.W * grid.cell and 0 <= top["z"] <= grid.H * grid.cell
+            if inside and lf["type"] != "gondola" and top["name"] not in have:
+                spawns.append({"name": f"Top of {lf['name']}", "x": top["x"], "z": top["z"]})
 
     north, west, south, east = grid.cfg["bounds"]
     meta = {
@@ -424,6 +443,7 @@ def build_course(cid):
         "routeSource": cfg.get("routeSource", ""),
         "spawns": spawns,
         "buildings": buildings,
+        "lifts": lifts,
         "route": [[round(float(x), 1), round(float(z), 1)] for x, z in route],
     }
     with open(os.path.join(OUT, f"{cid}.json"), "w") as f:

@@ -1,0 +1,202 @@
+{
+ "source": "Lift lines read from CalTopo screenshots of OpenStreetMap aerialway data (\u00a9 OpenStreetMap contributors, ODbL). Screenshots aligned to the elevation data by contour matching and feature matching; station heights check against published values within ~20 m.",
+ "lifts": [
+  {
+   "name": "Whistler Village Gondola",
+   "type": "gondola",
+   "stations": [
+    {
+     "name": "Village",
+     "lat": 50.113354,
+     "lon": -122.953051
+    },
+    {
+     "name": "Olympic",
+     "lat": 50.097707,
+     "lon": -122.951154
+    },
+    {
+     "name": "Roundhouse",
+     "lat": 50.067079,
+     "lon": -122.946755
+    }
+   ]
+  },
+  {
+   "name": "Creekside Gondola",
+   "type": "gondola",
+   "stations": [
+    {
+     "name": "Creekside",
+     "lat": 50.094855,
+     "lon": -122.989593
+    },
+    {
+     "name": "Creekside Gondola top",
+     "lat": 50.086298,
+     "lon": -122.963515
+    }
+   ]
+  },
+  {
+   "name": "Big Red Express",
+   "type": "chair",
+   "stations": [
+    {
+     "name": "Big Red bottom",
+     "lat": 50.086298,
+     "lon": -122.963515
+    },
+    {
+     "name": "Roundhouse",
+     "lat": 50.067079,
+     "lon": -122.946755
+    }
+   ]
+  },
+  {
+   "name": "Emerald 6 Express",
+   "type": "chair",
+   "stations": [
+    {
+     "name": "Emerald bottom",
+     "lat": 50.084872,
+     "lon": -122.940853
+    },
+    {
+     "name": "Emerald top",
+     "lat": 50.068548,
+     "lon": -122.945039
+    }
+   ]
+  },
+  {
+   "name": "Garbanzo Express",
+   "type": "chair",
+   "stations": [
+    {
+     "name": "Garbanzo bottom",
+     "lat": 50.096663,
+     "lon": -122.951154
+    },
+    {
+     "name": "Garbanzo top",
+     "lat": 50.079445,
+     "lon": -122.950883
+    }
+   ]
+  },
+  {
+   "name": "Olympic Chair",
+   "type": "chair",
+   "stations": [
+    {
+     "name": "Olympic Chair bottom",
+     "lat": 50.100663,
+     "lon": -122.949798
+    },
+    {
+     "name": "Olympic Chair top",
+     "lat": 50.093185,
+     "lon": -122.94557
+    }
+   ]
+  },
+  {
+   "name": "Fitzsimmons Express",
+   "type": "chair",
+   "stations": [
+    {
+     "name": "Fitzsimmons bottom",
+     "lat": 50.112659,
+     "lon": -122.952618
+    },
+    {
+     "name": "Fitzsimmons top",
+     "lat": 50.102575,
+     "lon": -122.951533
+    }
+   ]
+  },
+  {
+   "name": "Peak Express",
+   "type": "chair",
+   "stations": [
+    {
+     "name": "Peak Express bottom",
+     "lat": 50.066796,
+     "lon": -122.950979
+    },
+    {
+     "name": "Whistler Peak",
+     "lat": 50.059169,
+     "lon": -122.95692
+    }
+   ]
+  },
+  {
+   "name": "Harmony 6 Express",
+   "type": "chair",
+   "stations": [
+    {
+     "name": "Harmony bottom",
+     "lat": 50.067785,
+     "lon": -122.930165
+    },
+    {
+     "name": "Little Whistler",
+     "lat": 50.056485,
+     "lon": -122.946227
+    }
+   ]
+  },
+  {
+   "name": "Symphony Express",
+   "type": "chair",
+   "stations": [
+    {
+     "name": "Symphony bottom",
+     "lat": 50.058745,
+     "lon": -122.916523
+    },
+    {
+     "name": "Piccolo Summit",
+     "lat": 50.045889,
+     "lon": -122.938746
+    }
+   ]
+  },
+  {
+   "name": "Kadenwood Gondola",
+   "type": "gondola",
+   "stations": [
+    {
+     "name": "Creekside",
+     "lat": 50.093757,
+     "lon": -122.988481
+    },
+    {
+     "name": "Kadenwood",
+     "lat": 50.086836,
+     "lon": -122.983385
+    }
+   ]
+  },
+  {
+   "name": "Peak 2 Peak Gondola",
+   "type": "gondola",
+   "stations": [
+    {
+     "name": "Roundhouse",
+     "lat": 50.069678,
+     "lon": -122.945567
+    },
+    {
+     "name": "to Blackcomb",
+     "lat": 50.080635,
+     "lon": -122.92638
+    }
+   ]
+  }
+ ]
+}

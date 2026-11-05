@@ -5,6 +5,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { buildBuildings } from './buildings.js';
 import { TreeField } from './trees.js';
+import { buildLifts } from './lifts.js';
 
 export const LAYOUT = {
   starEvery: 85,        // metres between star patterns
@@ -324,6 +325,7 @@ export function buildCourse(terrain, scene) {
   const free = terrain.meta.mode === 'free';
   const route = !free && terrain.meta.route.length ? new Route(terrain.meta.route) : null;
   const buildings = buildBuildings(terrain, scene);
+  const lifts = buildLifts(terrain, scene);
 
   // Jumps: on a course, along the line where the slope is friendly;
   // in free ride, on open snow all over the mountain.
@@ -377,8 +379,12 @@ export function buildCourse(terrain, scene) {
     }
     return false;
   };
+  // Lift lines are cut through the forest too: keep trees off towers and stations.
+  const liftSpots = [];
+  for (const L of lifts.lifts) for (const p of L.pts) liftSpots.push(p);
+  const nearLift = (x, z) => liftSpots.some(p => (p.x - x) ** 2 + (p.z - z) ** 2 < 14 * 14);
   const keepClear = (x, z) =>
-    !buildings.clear(x, z, 2) ||
+    !buildings.clear(x, z, 2) || nearLift(x, z) ||
     kickers.some(k => (k.x - x) ** 2 + (k.z - z) ** 2 < 30 * 30) ||
     (route && nearLine(x, z, LAYOUT.clearing));
   const trees = new TreeField(terrain, scene, keepClear);
@@ -393,7 +399,7 @@ export function buildCourse(terrain, scene) {
   }
 
   return {
-    free, route, kickers, stars, starMesh, trees, buildings, start, end,
+    free, route, kickers, stars, starMesh, trees, buildings, lifts, start, end,
     spawns: terrain.meta.spawns || [],
     treesNear: (x, z) => trees.near(x, z),
   };

@@ -6,6 +6,7 @@ export const COLORS = {
     'Forest': 0x2e7d32, 'Purple': 0x7e57c2, 'Black': 0x212121, 'White': 0xeeeeee },
   pants: { 'Navy': 0x1f2a44, 'Black': 0x1b1b1b, 'Charcoal': 0x455a64, 'Tan': 0xa1887f, 'Olive': 0x556b2f, 'Red': 0xb71c1c },
   head: { 'Yellow': 0xffd23a, 'White': 0xf5f5f5, 'Black': 0x222222, 'Red': 0xd32f2f, 'Teal': 0x00897b, 'Pink': 0xec407a },
+  mask: { 'Black': 0x1b1b1b, 'Grey': 0x6b7280, 'Camo green': 0x4b5d3a, 'Red': 0xc62828, 'Blue': 0x1e40af, 'Leopard tan': 0xc8a165 },
   lens: { 'Smoke': 0x0f172a, 'Gold mirror': 0xd4a017, 'Blue mirror': 0x1565c0, 'Rose': 0xd81b60, 'Green mirror': 0x2e7d32 },
   board: { 'Red': 0xff3b30, 'Black': 0x1b1b1b, 'White': 0xf2f2f2, 'Teal': 0x00acc1, 'Yellow': 0xffc531, 'Wood': 0xb07a4a },
   accent: { 'White': 0xffffff, 'Black': 0x111111, 'Orange': 0xff7a00, 'Blue': 0x1e88e5, 'Pink': 0xff4fa3, 'Green': 0x43a047 },
@@ -38,7 +39,7 @@ export const BOARDS = {
 };
 
 export const DEFAULT_OUTFIT = {
-  jacket: 'Glacier blue', pants: 'Navy', headwear: 'helmet', head: 'Yellow', lens: 'Smoke',
+  jacket: 'Glacier blue', top: 'jacket', pants: 'Navy', mask: 'none', maskColor: 'Black', headwear: 'helmet', head: 'Yellow', lens: 'Smoke',
   pack: false, board: 'allmountain', boardColor: 'Red', accent: 'White', stance: 'regular',
 };
 
@@ -138,9 +139,44 @@ export function buildRiderModel(o) {
   const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.45, 4, 10), jacket);
   torso.position.y = 0.3;
   body.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10), mat(0xf1c27d));
+  // A balaclava covers the whole head except the goggles, so it replaces the skin.
+  const maskMat = mat(C('mask', o.maskColor));
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10), o.mask === 'balaclava' ? maskMat : mat(0xf1c27d));
   head.position.y = 0.8;
   body.add(head);
+  if (o.mask === 'gaiter') {
+    // Neck gaiter pulled up over nose and chin
+    const gaiter = new THREE.Mesh(new THREE.CylinderGeometry(0.178, 0.16, 0.2, 14), maskMat);
+    gaiter.position.y = 0.66;
+    body.add(gaiter);
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.176, 14, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.22), maskMat);
+    nose.position.y = 0.8;
+    body.add(nose);
+  }
+  if (o.top === 'hoodie') {
+    // Hood down on the back, two drawstrings and a front pocket
+    const hood = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), jacket);
+    hood.position.set(0.17, 0.58, 0);
+    hood.rotation.z = -1.2;
+    hood.scale.set(0.8, 0.55, 1.2); // lies flat between the shoulders
+    body.add(hood);
+    for (const z of [-0.06, 0.06]) {
+      const str = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 4), mat(0xf5f5f5));
+      str.position.set(-0.2, 0.47, z);
+      body.add(str);
+    }
+    const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.14, 0.26), jacket);
+    pocket.position.set(-0.2, 0.18, 0);
+    body.add(pocket);
+  } else {
+    // Jacket collar and a front zip
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.19, 0.1, 12), jacket);
+    collar.position.y = 0.6;
+    body.add(collar);
+    const zip = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.5, 0.02), mat(0x111111));
+    zip.position.set(-0.205, 0.32, 0);
+    body.add(zip);
+  }
   const headColor = mat(C('head', o.head));
   if (o.headwear === 'beanie') {
     const hat = new THREE.Mesh(new THREE.SphereGeometry(0.185, 14, 10, 0, Math.PI * 2, 0, Math.PI / 1.9), headColor);

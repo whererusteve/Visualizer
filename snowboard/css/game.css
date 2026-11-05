@@ -138,3 +138,10 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
   .panel.locker { width: calc(100% - 32px); max-height: 55%; top: auto; bottom: 12px; transform: none; }
 }
 body.in-locker .touch, body.in-locker .minimap, body.in-locker .hud .pill.stars { display: none; }
+.lift-prompt {
+  position: absolute; left: 50%; bottom: 30%; transform: translateX(-50%); pointer-events: auto;
+  border: 0; border-radius: 999px; padding: 12px 20px; font: inherit; font-size: 16px; font-weight: 700;
+  background: #e11d48; color: #fff; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.35); cursor: pointer;
+}
+.lift-prompt small { opacity: 0.75; font-weight: 500; }
+@media (pointer: coarse) { .lift-prompt small { display: none; } .lift-prompt { bottom: 140px; } }

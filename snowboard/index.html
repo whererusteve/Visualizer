@@ -18,6 +18,7 @@
       <div><span id="clock">0:00.0</span></div>
       <div><small id="togo-pre"></small> <span id="togo">–</span> <small id="togo-label">to go</small></div>
     </div>
+    <button id="lift-prompt" class="lift-prompt" hidden>Ride <strong id="lift-name"></strong> <small>(L)</small></button>
     <canvas id="minimap" class="minimap" aria-label="Map of the mountain"></canvas>
     <div class="charge"><div id="charge"></div></div>
     <button id="restart" class="restart" title="Restart (R)">↺</button>
@@ -56,6 +57,7 @@
       <tr><td>Space</td><td>Jump — hold for a bigger pop</td></tr>
       <tr><td>↑ or W</td><td>Tuck for speed, or push on the flats</td></tr>
       <tr><td>↓ or S</td><td>Brake</td></tr>
+      <tr><td>L</td><td>Ride a lift (stop near its bottom station)</td></tr>
       <tr><td>R</td><td>Back to the start (or your drop-in spot)</td></tr>
     </table>
     <p id="loading" class="note">Building the mountain…</p>

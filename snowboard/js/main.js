@@ -194,6 +194,7 @@ const KEYMAP = {
 window.addEventListener('keydown', e => {
   if (KEYMAP[e.code]) { keys.add(KEYMAP[e.code]); e.preventDefault(); }
   if (e.code === 'KeyR') restart();
+  if (e.code === 'KeyL' || (e.code === 'KeyE')) boardLift();
   if (e.code === 'Enter' && game.state !== 'playing' && game.state !== 'locker') begin();
 });
 window.addEventListener('keyup', e => { if (KEYMAP[e.code]) keys.delete(KEYMAP[e.code]); });
@@ -235,8 +236,24 @@ function toast(text) {
   el.classList.add('show');
 }
 
+// Put the rider at (x, z) facing downhill, first stepping downhill until clear
+// of lift stations and buildings (many drop-in spots are at a lift's top).
+function placeClear(x, z) {
+  const blocked = () => course.lifts.keepClear.some(k => (k.x - x) ** 2 + (k.z - z) ** 2 < (k.r + 9) ** 2)
+    || course.buildings.hit(x, z, terrain.terrainHeight(x, z), 6);
+  for (let i = 0; i < 25 && blocked(); i++) {
+    const n = terrain.normalAt(x, z), d = Math.hypot(n.x, n.z) || 1;
+    x += (n.x / d) * 4; z += (n.z / d) * 4;
+  }
+  const n = terrain.normalAt(x, z), d = Math.hypot(n.x, n.z) || 1;
+  rider.place(x, z, n.x / d || 0, n.z / d || 1, 0);
+}
+
 function restart() {
   if (!course) return;
+  ride = null;
+  course.lifts.carry(null);
+  if (game.state === 'riding') game.state = 'playing';
   if (course.route) {
     const s = course.route.at(0), a = course.route.at(25);
     const dx = a.x - s.x, dz = a.z - s.z, d = Math.hypot(dx, dz);
@@ -244,9 +261,7 @@ function restart() {
   } else {
     // Free ride: drop in at the chosen spot, facing downhill.
     const sp = course.spawns[game.spawn] || course.spawns[0];
-    const n = terrain.normalAt(sp.x, sp.z);
-    const d = Math.hypot(n.x, n.z) || 1;
-    rider.place(sp.x, sp.z, n.x / d || 0, n.z / d || 1, 0);
+    placeClear(sp.x, sp.z);
   }
   resetStarMatrices();
   game.stars = 0; game.time = 0; game.routeIndex = 0;
@@ -422,11 +437,14 @@ function buildLocker() {
     }
     return wrap;
   };
-  row('Jacket', swatches('jacket', 'jacket'));
+  row('Top', chips('top', [['jacket', 'Jacket'], ['hoodie', 'Hoodie']]));
+  row(outfit.top === 'hoodie' ? 'Hoodie colour' : 'Jacket colour', swatches('jacket', 'jacket'));
   row('Pants', swatches('pants', 'pants'));
   row('On your head', chips('headwear', [['helmet', 'Helmet'], ['beanie', 'Beanie']]));
   row(outfit.headwear === 'beanie' ? 'Beanie colour' : 'Helmet colour', swatches('head', 'head'));
   row('Goggle lens', swatches('lens', 'lens'));
+  row('Face mask', chips('mask', [['none', 'None'], ['gaiter', 'Neck gaiter'], ['balaclava', 'Balaclava']]));
+  if (outfit.mask !== 'none') row('Mask colour', swatches('maskColor', 'mask'));
   row('Pack', chips('pack', [[false, 'None'], [true, 'Avalanche airbag pack']]));
   // Boards, with what each one does to the riding.
   const boards = document.createElement('div'); boards.className = 'boards';
@@ -495,6 +513,13 @@ function buildMinimap() {
     g.stroke();
   }
   g.fillStyle = '#1d4ed8';
+  // Lifts: red lines, like on a trail map
+  g.strokeStyle = '#e11d48'; g.lineWidth = 1.2;
+  for (const L of course.lifts.lifts) {
+    g.beginPath();
+    L.st.forEach((p, i) => (i ? g.lineTo(px(p.x), px(p.z)) : g.moveTo(px(p.x), px(p.z))));
+    g.stroke();
+  }
   for (const sp of course.spawns) { g.beginPath(); g.arc(px(sp.x), px(sp.z), 2.5, 0, Math.PI * 2); g.fill(); }
   mini = { cv, ctx: cv.getContext('2d'), base, px };
 }
@@ -557,7 +582,8 @@ function frame(now) {
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
   const t = now / 1000;
-  if (game.state === 'playing' || game.state === 'finished') {
+  if (game.state === 'riding') rideStep(dt);
+  else if (game.state === 'playing' || game.state === 'finished') {
     acc += dt;
     const input = readInput();
     let n = 0;
@@ -580,11 +606,53 @@ function frame(now) {
   }
   spray.update(dt);
   course.trees.update(rider.p.x, rider.p.z);
+  course.lifts.update(t, rider.p);
+  updateLiftPrompt();
   rider.updateModel(dt, t);
   updateStars(t);
   if (game.state === 'locker') lockerCamera(t); else updateCamera(dt);
   updateHud();
   renderer.render(scene, camera);
+}
+
+// ---------- Riding lifts ----------
+let ride = null, offer = null;
+function updateLiftPrompt() {
+  const can = game.state === 'playing' && rider.crashed <= 0 && rider.contact && rider.speed() < 6;
+  const o = can ? course.lifts.boardable(rider.p.x, rider.p.z) : null;
+  if ((o && o.lift) !== (offer && offer.lift)) {
+    offer = o;
+    $('lift-prompt').hidden = !o;
+    if (o) $('lift-name').textContent = o.lift.name;
+  }
+}
+function boardLift() {
+  if (!offer || game.state !== 'playing') return;
+  ride = course.lifts.ride(offer.lift, offer.from);
+  game.state = 'riding';
+  $('lift-prompt').hidden = true;
+  toast(offer.lift.name);
+  offer = null;
+}
+const _ride = new THREE.Vector3();
+function rideStep(dt) {
+  ride.t += dt;
+  ride.pos(_ride);
+  rider.p.set(_ride.x, _ride.y - course.lifts.seatDrop(ride.lift), _ride.z);
+  course.lifts.carry(ride.lift, _ride);
+  rider.v.set(ride.lift.dir.x, 0, ride.lift.dir.z).multiplyScalar(0.01);
+  rider.yaw = Math.atan2(ride.lift.dir.x, ride.lift.dir.z);
+  rider.contact = false;
+  if (ride.t >= ride.duration) {
+    // Unload: step off just past the top station, facing downhill.
+    const top = ride.lift.st[ride.lift.st.length - 1];
+    placeClear(top.x + ride.lift.dir.x * 12, top.z + ride.lift.dir.z * 12);
+    ride = null;
+    course.lifts.carry(null);
+    game.state = 'playing';
+    havePrev = false;
+    snapCamera();
+  }
 }
 
 function finish() {
@@ -627,6 +695,7 @@ async function init() {
   $('drop').disabled = false;
   $('drop').addEventListener('click', begin);
   $('locker-open').addEventListener('click', () => openLocker(true));
+  $('lift-prompt').addEventListener('click', boardLift);
   $('locker-done').addEventListener('click', () => openLocker(false));
   $('again').addEventListener('click', () => { restart(); begin(); });
   $('restart').addEventListener('click', () => { restart(); });

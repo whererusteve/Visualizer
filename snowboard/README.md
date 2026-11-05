@@ -13,8 +13,8 @@ Three ways to ride (pick on the start screen):
   contributors) shown on CalTopo: 5.6 km, 1,508 m vertical. `#peak-to-creek`
 - **Peak to Village**: a line found along the real cleared runs (see Forest below): 6.4 km. `#whistler`
 
-**Rider & board** (start screen): pick jacket, pants, helmet or beanie, goggle lens, an avalanche
-airbag pack, stance, board colours and one of four boards. Each board changes the riding a little
+**Rider & board** (start screen): pick jacket or hoodie, pants, helmet or beanie, goggle lens, a face
+mask (neck gaiter or balaclava), an avalanche airbag pack, stance, board colours and one of four boards. Each board changes the riding a little
 (numbers in `BOARDS` in `js/outfit.js`):
 
 | Board | Feel |
@@ -25,6 +25,14 @@ airbag pack, stance, board colours and one of four boards. Each board changes th
 | Carving board | 40% more edge grip, slow spins |
 
 Choices are saved on your device.
+
+**Lifts**: 12 real lifts with towers, cables and moving chairs or gondola cabins: Whistler
+Village Gondola (via Olympic), Fitzsimmons, Olympic Chair, Garbanzo, Emerald 6, Creekside
+Gondola, Big Red, Kadenwood Gondola, Peak Express, Harmony 6, Symphony, and Peak 2 Peak (towards
+Blackcomb). Stop near a bottom station and press **L** (or tap the red button) to ride to the top;
+a ride takes about 14 seconds. Lift tops are also drop-in spots in free ride. Lift lines come from
+CalTopo screenshots of OpenStreetMap data (`tools/traces/lifts.json`); station heights match
+published values within about 20 m (Roundhouse 1,845 m, Peak 2,178 m, Piccolo 2,008 m, Olympic 1,028 m).
 
 Scoring isn't in yet; this version is about the riding, the physics and the mountain.
 
@@ -85,6 +93,7 @@ js/course.js        stars, jumps, trees, gates (LAYOUT numbers at the top)
 js/buildings.js     Creekside and Kadenwood buildings from real footprints
 js/trees.js         the forest near the rider, from the satellite forest map
 js/outfit.js        clothes, boards (shapes and handling) and the rider model
+js/lifts.js         lifts: towers, cables, chairs and cabins, riding
 js/rider.js         snowboard physics (PHYSICS numbers at the top) and the rider model
 js/audio.js         synthesized sounds (no audio files)
 tools/build_course.py   real elevation data → course files
@@ -105,7 +114,6 @@ vendor/             three.js r170 (MIT licence)
 ## Ideas for later
 
 - Scoring: stars, airtime, spins, clean landings
-- Lifts and lodges (Village and Creekside gondolas, Peak Express, Roundhouse Lodge) once their
-  real positions are traced
+- Lodges (Roundhouse, Rendezvous) and the Village buildings
 - Run names on the HUD from traced run lines
 - Village buildings (only Creekside and Kadenwood are traced so far)
