@@ -5,8 +5,8 @@ import { buildCourse } from './course.js';
 import { Rider } from './rider.js';
 import { Sound } from './audio.js';
 
-// Pick a run with #whistler or ?course=whistler; Peak to Creek by default.
-const COURSE_ID = location.hash.slice(1) || new URLSearchParams(location.search).get('course') || 'peak-to-creek';
+// Pick a run with #peak-to-creek or ?course=peak-to-creek; free ride by default.
+const COURSE_ID = location.hash.slice(1) || new URLSearchParams(location.search).get('course') || 'freeride';
 const $ = id => document.getElementById(id);
 
 // ---------- Renderer, scene, camera ----------
@@ -74,6 +74,46 @@ function snowTexture() {
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
   return t;
+}
+
+// The ground's colour across the whole mountain: snow, with the real forest
+// (from the satellite forest map) painted in darker green-grey. Up close the 3D
+// trees stand on it; far away it is what makes the forest visible.
+function groundTexture(terrain) {
+  const c = document.createElement('canvas');
+  const w = terrain.fw || 2, h = terrain.fh || 2;
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const img = g.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    const f = terrain.forest ? terrain.forest[i] / 255 : 0;
+    const k = Math.min(1, f * 1.1);
+    const n = (Math.random() - 0.5) * 10 * k;
+    img.data[i * 4] = 255 + (70 - 255) * k + n;
+    img.data[i * 4 + 1] = 255 + (98 - 255) * k + n;
+    img.data[i * 4 + 2] = 255 + (90 - 255) * k + n;
+    img.data[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.flipY = false; // row 0 is the north edge, like the map
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+// Ground material: whole-map colour (above) times a fine repeating snow texture.
+function groundMaterial(terrain) {
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: groundTexture(terrain) });
+  const detail = snowTexture();
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.detailMap = { value: detail };
+    sh.uniforms.detailRepeat = { value: new THREE.Vector2(terrain.sizeX / 7, terrain.sizeZ / 7) };
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D detailMap;\nuniform vec2 detailRepeat;')
+      .replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb *= texture2D(detailMap, vMapUv * detailRepeat).rgb;');
+  };
+  return mat;
 }
 
 function snowColor(x, y, z, n, out) {
@@ -178,7 +218,7 @@ function readInput() {
 
 // ---------- Game state ----------
 const sound = new Sound();
-const game = { state: 'loading', time: 0, stars: 0, routeIndex: 0, toastTimer: 0 };
+const game = { state: 'loading', time: 0, stars: 0, routeIndex: 0, toastTimer: 0, spawn: 0 };
 let terrain, course, rider, spray;
 
 function fmtTime(t) {
@@ -196,10 +236,18 @@ function toast(text) {
 
 function restart() {
   if (!course) return;
-  const s = course.route.at(0), a = course.route.at(25);
-  const dx = a.x - s.x, dz = a.z - s.z, d = Math.hypot(dx, dz);
-  rider.place(s.x, s.z, dx / d, dz / d, 0);
-  course.stars.forEach(st => { st.got = -1; });
+  if (course.route) {
+    const s = course.route.at(0), a = course.route.at(25);
+    const dx = a.x - s.x, dz = a.z - s.z, d = Math.hypot(dx, dz);
+    rider.place(s.x, s.z, dx / d, dz / d, 0);
+  } else {
+    // Free ride: drop in at the chosen spot, facing downhill.
+    const sp = course.spawns[game.spawn] || course.spawns[0];
+    const n = terrain.normalAt(sp.x, sp.z);
+    const d = Math.hypot(n.x, n.z) || 1;
+    rider.place(sp.x, sp.z, n.x / d || 0, n.z / d || 1, 0);
+  }
+  resetStarMatrices();
   game.stars = 0; game.time = 0; game.routeIndex = 0;
   havePrev = false;
   $('finish').hidden = true;
@@ -247,7 +295,6 @@ function updateCamera(dt, snap = false) {
 
 // ---------- Stars ----------
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _v = new THREE.Vector3();
-const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
 const _yAxis = new THREE.Vector3(0, 1, 0);
 // Where the rider's body was last frame. Stars are collected anywhere along the
 // path between then and now, so fast riders on slow phones don't skip past them.
@@ -261,12 +308,39 @@ function distToPath(st, a, b) {
   t = Math.max(0, Math.min(1, t));
   return Math.hypot(a.x + abx * t - st.x, a.y + aby * t - st.y, a.z + abz * t - st.z);
 }
+// Stars are sorted into 100 m squares so each frame only the ones near the
+// rider are checked and animated; the rest keep their last position.
+let starGrid = null;
+function starsNear(x, z, r) {
+  if (!starGrid) {
+    starGrid = new Map();
+    course.stars.forEach((st, i) => {
+      st.i = i;
+      const k = `${Math.floor(st.x / 100)},${Math.floor(st.z / 100)}`;
+      if (!starGrid.has(k)) starGrid.set(k, []);
+      starGrid.get(k).push(st);
+    });
+  }
+  const out = [], n = Math.ceil(r / 100), ci = Math.floor(x / 100), cj = Math.floor(z / 100);
+  for (let b = -n; b <= n; b++) for (let a = -n; a <= n; a++) {
+    const list = starGrid.get(`${ci + a},${cj + b}`);
+    if (list) out.push(...list);
+  }
+  return out;
+}
+function resetStarMatrices() {
+  course.stars.forEach(st => { st.got = -1; });
+}
+// Only stars within STAR_DRAW metres are drawn (packed into the first slots of
+// the instanced mesh); further ones are too small to see through the haze anyway.
+const STAR_DRAW = 450;
 function updateStars(now) {
   bodyNow.copy(rider.p).addScaledVector(rider.n, 0.9);
   if (!havePrev) { bodyPrev.copy(bodyNow); havePrev = true; }
   const mesh = course.starMesh;
   _q.setFromAxisAngle(_yAxis, now * 3);
-  course.stars.forEach((st, i) => {
+  let n = 0;
+  for (const st of starsNear(rider.p.x, rider.p.z, STAR_DRAW)) {
     if (st.got < 0 && rider.crashed <= 0 && game.state === 'playing') {
       if (distToPath(st, bodyPrev, bodyNow) < STAR_REACH) {
         st.got = now;
@@ -276,27 +350,93 @@ function updateStars(now) {
     }
     if (st.got >= 0) {
       const e = now - st.got;
-      if (e > 0.22) { mesh.setMatrixAt(i, _zero); return; }
+      if (e > 0.22) continue; // collected: gone
       _s.setScalar(1.35 + e * 5);
       _m.compose(_v.set(st.x, st.y + e * 8, st.z), _q, _s);
     } else {
       _s.setScalar(1.35);
-      _m.compose(_v.set(st.x, st.y + Math.sin(now * 2 + i) * 0.12, st.z), _q, _s);
+      _m.compose(_v.set(st.x, st.y + Math.sin(now * 2 + st.i) * 0.12, st.z), _q, _s);
     }
-    mesh.setMatrixAt(i, _m);
-  });
+    mesh.setMatrixAt(n++, _m);
+  }
+  mesh.count = n;
   mesh.instanceMatrix.needsUpdate = true;
   bodyPrev.copy(bodyNow);
 }
 
+// ---------- Minimap ----------
+// A small map of the whole mountain: shaded relief, forest, the course line
+// and drop-in spots, with your position and heading on top.
+let mini = null;
+function buildMinimap() {
+  const cv = $('minimap');
+  const scale = 4; // terrain cells per minimap pixel
+  const w = Math.floor(terrain.W / scale), h = Math.floor(terrain.H / scale);
+  cv.width = w; cv.height = h;
+  const base = document.createElement('canvas');
+  base.width = w; base.height = h;
+  const g = base.getContext('2d');
+  const img = g.createImageData(w, h);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const ti = i * scale, tj = j * scale;
+      const dx = terrain.at(ti + 1, tj) - terrain.at(ti - 1, tj);
+      const dz = terrain.at(ti, tj + 1) - terrain.at(ti, tj - 1);
+      const shade = Math.max(0.35, Math.min(1.1, 0.8 + (-dx + dz) * 0.02));
+      const f = terrain.forestAt(ti * terrain.cell, tj * terrain.cell);
+      const k = (j * w + i) * 4;
+      img.data[k] = (235 - 165 * f) * shade;
+      img.data[k + 1] = (240 - 140 * f) * shade;
+      img.data[k + 2] = (250 - 160 * f) * shade;
+      img.data[k + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const px = v => v / terrain.cell / scale;
+  if (course.route) {
+    g.strokeStyle = '#ff2d95'; g.lineWidth = 2; g.beginPath();
+    course.route.p.forEach((p, i) => (i ? g.lineTo(px(p.x), px(p.z)) : g.moveTo(px(p.x), px(p.z))));
+    g.stroke();
+  }
+  g.fillStyle = '#1d4ed8';
+  for (const sp of course.spawns) { g.beginPath(); g.arc(px(sp.x), px(sp.z), 2.5, 0, Math.PI * 2); g.fill(); }
+  mini = { cv, ctx: cv.getContext('2d'), base, px };
+}
+function drawMinimap() {
+  if (!mini) return;
+  const { ctx, base, px } = mini;
+  ctx.drawImage(base, 0, 0);
+  const x = px(rider.p.x), z = px(rider.p.z);
+  const f = rider.forward();
+  ctx.fillStyle = '#ffc531'; ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x + f.x * 7, z + f.z * 7);
+  ctx.lineTo(x - f.x * 4 - f.z * 4, z - f.z * 4 + f.x * 4);
+  ctx.lineTo(x - f.x * 4 + f.z * 4, z - f.z * 4 - f.x * 4);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+}
+
 // ---------- HUD ----------
 function updateHud() {
-  $('stars').textContent = `${game.stars} / ${course.stars.length}`;
+  $('stars').textContent = course.route ? `${game.stars} / ${course.stars.length}` : `${game.stars}`;
   $('speed').textContent = Math.round(rider.speed() * 3.6);
   $('elev').textContent = Math.round(rider.p.y + terrain.base);
   $('clock').textContent = fmtTime(game.time);
-  const left = Math.max(0, course.route.length - course.route.s[game.routeIndex]);
-  $('togo').textContent = left > 1000 ? `${(left / 1000).toFixed(1)} km` : `${Math.round(left)} m`;
+  if (course.route) {
+    const left = Math.max(0, course.route.length - course.route.s[game.routeIndex]);
+    $('togo').textContent = left > 1000 ? `${(left / 1000).toFixed(1)} km` : `${Math.round(left)} m`;
+  } else {
+    // Free ride: name the nearest landmark instead of distance to go.
+    let best = null, bd = Infinity;
+    for (const sp of course.spawns) {
+      const d = (sp.x - rider.p.x) ** 2 + (sp.z - rider.p.z) ** 2;
+      if (d < bd) { bd = d; best = sp; }
+    }
+    $('togo').textContent = best ? best.name : '';
+    $('togo-label').textContent = '';
+    $('togo-pre').textContent = 'near';
+  }
+  drawMinimap();
   $('charge').style.transform = `scaleX(${rider.charge})`;
   $('charge').parentElement.style.opacity = rider.charge > 0 ? 1 : 0;
 }
@@ -332,15 +472,18 @@ function frame(now) {
     }
     if (game.state === 'playing') {
       game.time += dt;
-      const near = course.route.nearest(rider.p.x, rider.p.z, game.routeIndex);
-      game.routeIndex = near.index;
-      if (near.s > course.route.length - 30 && near.distance < 60) finish();
+      if (course.route) {
+        const near = course.route.nearest(rider.p.x, rider.p.z, game.routeIndex);
+        game.routeIndex = near.index;
+        if (near.s > course.route.length - 30 && near.distance < 60) finish();
+      }
     }
     handleEvents();
     if (rider.contact && rider.carve > 0.15 && rider.crashed <= 0) spray.emit(rider.p, rider.v, rider.carve, dt);
     sound.update(rider.speed(), rider.carve, rider.contact);
   }
   spray.update(dt);
+  course.trees.update(rider.p.x, rider.p.z);
   rider.updateModel(dt, t);
   updateStars(t);
   updateCamera(dt);
@@ -368,11 +511,17 @@ async function init() {
   const pick = $('course-pick');
   pick.value = COURSE_ID;
   pick.addEventListener('change', () => { location.hash = pick.value; location.reload(); });
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: snowTexture() });
-  scene.add(terrain.buildMesh(snowColor, mat));
+  scene.add(terrain.buildMesh(snowColor, groundMaterial(terrain)));
   course = buildCourse(terrain, scene);
   rider = new Rider(terrain, scene);
   spray = new Spray();
+  const spawnPick = $('spawn-pick');
+  if (course.spawns.length && !course.route) {
+    course.spawns.forEach((sp, i) => spawnPick.add(new Option(sp.name, i)));
+    spawnPick.addEventListener('change', () => { game.spawn = +spawnPick.value; restart(); });
+    $('spawn-row').hidden = false;
+  }
+  buildMinimap();
   restart();
   game.state = 'intro';
   $('loading').hidden = true;
@@ -382,6 +531,6 @@ async function init() {
   $('restart').addEventListener('click', () => { restart(); });
   requestAnimationFrame(frame);
   // Handy for tuning from the browser console.
-  window.game = { game, rider, course, terrain, camera, snapCamera };
+  window.game = { game, rider, course, terrain, camera, snapCamera, restart, renderer };
 }
 init();

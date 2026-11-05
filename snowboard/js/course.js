@@ -1,19 +1,20 @@
-// Course design: where the stars, jumps and trees go.
-// Everything is placed along the guide line ("route") that the build script
-// found down the real mountain. Change the numbers in LAYOUT to reshape the
-// course without touching the physics.
+// Course design: where the stars and jumps go.
+// On a course they follow the line down the mountain; in free ride they are
+// spread over the real open snow (runs and bowls) seen in satellite images.
+// Change the numbers in LAYOUT to reshape things without touching the physics.
 import * as THREE from '../vendor/three.module.min.js';
 import { buildBuildings } from './buildings.js';
+import { TreeField } from './trees.js';
 
 export const LAYOUT = {
   starEvery: 85,        // metres between star patterns
   jumpEvery: 300,       // metres between jumps
   jumpSize: { length: 10, width: 8, height: 1.6 }, // a medium park jump
-  treeline: 1720,       // metres above sea level; no trees above this
-  treeSpacing: 13,      // metres between tree candidates
-  runWidth: { base: 21, swing: 5 }, // half-width of the cleared run, metres
-  poleEvery: 22,        // metres between boundary poles
-  forestDepth: 380,     // how far from the run the forest is drawn
+  clearing: 9,          // metres either side of a course line kept free of trees
+  poleEvery: 22,        // metres between boundary poles (open alpine only)
+  poleOffset: 20,       // metres from the line to the poles
+  freeJumpEvery: 260,   // free ride: at least this far apart
+  freeStarEvery: 170,   // free ride: grid for star lines (one line per square, if open)
   seed: 7,
 };
 
@@ -159,7 +160,13 @@ function placeStars(terrain, route, kickers, rand) {
       for (let i = 0; i < 6; i++) { const q = side(route.at(s + i * 4), off); add(q.x, q.z, 1.1 + Math.sin(i / 5 * Math.PI) * 2.6); }
     }
   }
-  // Stars in the air over each jump, along a typical flight path.
+  return stars.concat(kickerStars(terrain, kickers));
+}
+
+// Stars on the approach to each jump and in the air along a typical flight path.
+function kickerStars(terrain, kickers) {
+  const stars = [];
+  const add = (x, z, lift = 1.1) => stars.push({ x, z, y: terrain.groundHeight(x, z) + lift });
   for (const k of kickers) {
     for (let i = 0; i < 3; i++) {
       const a = { x: k.x - k.dx * (k.L / 2 + 14 - i * 5), z: k.z - k.dz * (k.L / 2 + 14 - i * 5) };
@@ -182,56 +189,78 @@ function placeStars(terrain, route, kickers, rand) {
   return stars;
 }
 
-// ---------- Trees ----------
-function treeGeometry() {
-  const parts = [];
-  const add = (geo, y, color) => {
-    geo.translate(0, y, 0);
-    const g = geo.toNonIndexed();
-    const c = new Float32Array(g.attributes.position.count * 3);
-    for (let i = 0; i < c.length; i += 3) { c[i] = color[0]; c[i + 1] = color[1]; c[i + 2] = color[2]; }
-    g.setAttribute('color', new THREE.BufferAttribute(c, 3));
-    g.deleteAttribute('uv');
-    parts.push(g);
-  };
-  add(new THREE.CylinderGeometry(0.22, 0.3, 2.2, 5), 1.1, [0.32, 0.22, 0.15]);
-  add(new THREE.ConeGeometry(2.3, 5, 6), 4, [0.1, 0.27, 0.19]);
-  add(new THREE.ConeGeometry(1.7, 4.2, 6), 6.6, [0.13, 0.31, 0.22]);
-  add(new THREE.ConeGeometry(1.0, 3.2, 6), 9, [0.85, 0.9, 0.95]);
-  let n = 0;
-  for (const p of parts) n += p.attributes.position.count;
-  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
-  let o = 0;
-  for (const p of parts) {
-    pos.set(p.attributes.position.array, o);
-    nor.set(p.attributes.normal.array, o);
-    col.set(p.attributes.color.array, o);
-    o += p.attributes.position.array.length;
+// ---------- Free ride ----------
+// Is this spot open snow (no forest within r metres)?
+function openSnow(terrain, x, z, r) {
+  for (let a = 0; a < 8; a++) {
+    const ang = a / 8 * Math.PI * 2;
+    if (terrain.forestAt(x + Math.cos(ang) * r, z + Math.sin(ang) * r) > 0.1) return false;
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  return g;
+  return terrain.forestAt(x, z) < 0.08;
 }
 
-// Half the width of the run at a distance along it. Real Whistler runs cut
-// through the trees are roughly 30-60 m wide, wider in some places than others.
-// Extra room after each jump for wobbly landings.
-export function halfWidth(route, s) {
-  const L = LAYOUT.runWidth;
-  let w = L.base + L.swing * Math.sin(s / 170) + L.swing * 0.5 * Math.sin(s / 47 + 1.3);
-  for (const k of route.kickerS || []) if (s > k - 20 && s < k + 110) w += 12;
-  return w;
+function fallLine(terrain, x, z) {
+  const n = terrain.normalAt(x, z);
+  const d = Math.hypot(n.x, n.z) || 1;
+  return { dx: n.x / d, dz: n.z / d, deg: Math.acos(Math.min(1, n.y)) * 180 / Math.PI };
 }
 
-// Bamboo boundary poles with orange tops along both edges of the run.
+function freeKickers(terrain, rand, buildings) {
+  const spots = [];
+  const step = 140;
+  for (let z = step / 2; z < terrain.sizeZ; z += step) {
+    for (let x = step / 2; x < terrain.sizeX; x += step) {
+      const px = x + (rand() - 0.5) * step * 0.8, pz = z + (rand() - 0.5) * step * 0.8;
+      spots.push([px, pz, rand()]);
+    }
+  }
+  spots.sort((a, b) => a[2] - b[2]);
+  const out = [];
+  for (const [x, z] of spots) {
+    const elev = terrain.terrainHeight(x, z) + terrain.base;
+    if (elev > 2050) continue;
+    const f = fallLine(terrain, x, z);
+    if (f.deg < 8 || f.deg > 22) continue;
+    if (!openSnow(terrain, x, z, 22) || !openSnow(terrain, x + f.dx * 40, z + f.dz * 40, 18)) continue;
+    if (!buildings.clear(x, z, 30)) continue;
+    if (out.some(k => (k.x - x) ** 2 + (k.z - z) ** 2 < LAYOUT.freeJumpEvery ** 2)) continue;
+    out.push({ x, z, dx: f.dx, dz: f.dz });
+  }
+  return out;
+}
+
+function freeStars(terrain, rand, buildings) {
+  const stars = [];
+  const step = LAYOUT.freeStarEvery;
+  for (let z = step / 2; z < terrain.sizeZ; z += step) {
+    for (let x = step / 2; x < terrain.sizeX; x += step) {
+      let px = x + (rand() - 0.5) * step * 0.7, pz = z + (rand() - 0.5) * step * 0.7;
+      if (!openSnow(terrain, px, pz, 8)) continue;
+      const f0 = fallLine(terrain, px, pz);
+      if (f0.deg < 5 || f0.deg > 35) continue;
+      // A line of stars that follows the fall line, like a rider would.
+      const wiggle = rand() < 0.4 ? 5 + rand() * 4 : 0;
+      for (let i = 0; i < 7; i++) {
+        const f = fallLine(terrain, px, pz);
+        const off = Math.sin(i * 0.9) * wiggle;
+        const sx = px - f.dz * off, sz = pz + f.dx * off;
+        if (terrain.forestAt(sx, sz) > 0.15 || !buildings.clear(sx, sz, 3)) break;
+        stars.push({ x: sx, z: sz, y: terrain.groundHeight(sx, sz) + 1.1 });
+        px += f.dx * 5; pz += f.dz * 5;
+      }
+    }
+  }
+  return stars;
+}
+
+// Bamboo boundary poles with orange tops, only where the line crosses open alpine.
 function boundaryPoles(terrain, route) {
   const spots = [];
   for (let s = 30; s < route.length - 40; s += LAYOUT.poleEvery) {
-    const p = route.at(s), w = halfWidth(route, s) + 1;
+    const p = route.at(s), w = LAYOUT.poleOffset;
     for (const side of [-1, 1]) {
       const x = p.x - p.dz * side * w, z = p.z + p.dx * side * w;
+      if (terrain.forestAt(x, z) > 0.05 || terrain.terrainHeight(x, z) + terrain.base < 1650) continue;
       spots.push({ x, z, y: terrain.groundHeight(x, z) });
     }
   }
@@ -239,53 +268,14 @@ function boundaryPoles(terrain, route) {
   geo.translate(0, 0.95, 0);
   const col = [];
   const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const top = pos.getY(i) > 1.4;
-    col.push(...(top ? [1, 0.42, 0.05] : [0.85, 0.75, 0.5]));
-  }
+  for (let i = 0; i < pos.count; i++) col.push(...(pos.getY(i) > 1.4 ? [1, 0.42, 0.05] : [0.85, 0.75, 0.5]));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }), spots.length);
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }), Math.max(1, spots.length));
+  mesh.count = spots.length;
   const m = new THREE.Matrix4();
   spots.forEach((p, i) => { m.makeTranslation(p.x, p.y - 0.1, p.z); mesh.setMatrixAt(i, m); });
   mesh.computeBoundingSphere();
   return mesh;
-}
-
-function placeTrees(terrain, route, rand, buildings) {
-  const trees = [];
-  const step = LAYOUT.treeSpacing;
-  const samples = [];
-  for (let s = 0; s <= route.length; s += 20) samples.push({ ...route.at(s), s });
-  const runHalfWidth = s => halfWidth(route, s);
-  const D = LAYOUT.forestDepth;
-  const minX = Math.max(0, Math.min(...samples.map(p => p.x)) - D);
-  const maxX = Math.min(terrain.sizeX, Math.max(...samples.map(p => p.x)) + D);
-  const minZ = Math.max(0, Math.min(...samples.map(p => p.z)) - D);
-  const maxZ = Math.min(terrain.sizeZ, Math.max(...samples.map(p => p.z)) + D);
-  for (let z = minZ; z < maxZ; z += step) {
-    for (let x = minX; x < maxX; x += step) {
-      const tx = x + (rand() - 0.5) * step * 0.9, tz = z + (rand() - 0.5) * step * 0.9;
-      let bd = Infinity, bs = 0;
-      for (const p of samples) {
-        const d = (p.x - tx) ** 2 + (p.z - tz) ** 2;
-        if (d < bd) { bd = d; bs = p.s; }
-      }
-      bd = Math.sqrt(bd);
-      if (bd > LAYOUT.forestDepth || bd < runHalfWidth(bs)) continue;
-      const y = terrain.terrainHeight(tx, tz);
-      const elev = y + terrain.base;
-      const line = LAYOUT.treeline + Math.sin(tx / 90) * 50 + Math.cos(tz / 120) * 40;
-      if (elev > line) continue;
-      if (terrain.slopeDegrees(tx, tz) > 40) continue;
-      if (!buildings.clear(tx, tz)) continue;
-      // Thin the forest near the treeline and in random glades.
-      const thin = Math.min(1, (line - elev) / 150);
-      if (rand() > 0.35 + 0.6 * thin) continue;
-      const scale = 0.75 + rand() * 0.75;
-      trees.push({ x: tx, y, z: tz, scale, yaw: rand() * Math.PI * 2 });
-    }
-  }
-  return trees;
 }
 
 // ---------- Gates ----------
@@ -326,78 +316,80 @@ function gate(terrain, p, text, bg) {
 // ---------- Put it all together ----------
 export function buildCourse(terrain, scene) {
   const rand = rng(LAYOUT.seed);
-  const route = new Route(terrain.meta.route);
+  const free = terrain.meta.mode === 'free';
+  const route = !free && terrain.meta.route.length ? new Route(terrain.meta.route) : null;
+  const buildings = buildBuildings(terrain, scene);
 
-  // Jumps: only where the slope is friendly (not flat, not a cliff).
+  // Jumps: on a course, along the line where the slope is friendly;
+  // in free ride, on open snow all over the mountain.
   const kickers = [];
-  for (let s = 220; s < route.length - 200; s += LAYOUT.jumpEvery) {
-    let placed = false;
-    for (let tryS = s; tryS < s + 120 && !placed; tryS += 12) {
-      const p = route.at(tryS);
-      const a = terrain.terrainHeight(p.x, p.z);
-      const b = terrain.terrainHeight(p.x + p.dx * 40, p.z + p.dz * 40);
-      const deg = Math.atan2(a - b, 40) * 180 / Math.PI;
-      if (deg < 7 || deg > 26) continue;
-      const k = makeKicker(terrain, p.x, p.z, p.dx, p.dz, LAYOUT.jumpSize);
-      k.s = tryS;
-      kickers.push(k);
-      terrain.bumps.push(k);
-      scene.add(kickerMesh(terrain, k));
-      placed = true;
+  const addKicker = (x, z, dx, dz, s) => {
+    const k = makeKicker(terrain, x, z, dx, dz, LAYOUT.jumpSize);
+    k.s = s;
+    kickers.push(k);
+    terrain.bumps.push(k);
+    scene.add(kickerMesh(terrain, k));
+  };
+  if (route) {
+    for (let s = 220; s < route.length - 200; s += LAYOUT.jumpEvery) {
+      for (let tryS = s; tryS < s + 120; tryS += 12) {
+        const p = route.at(tryS);
+        const a = terrain.terrainHeight(p.x, p.z);
+        const b = terrain.terrainHeight(p.x + p.dx * 40, p.z + p.dz * 40);
+        const deg = Math.atan2(a - b, 40) * 180 / Math.PI;
+        if (deg < 7 || deg > 26) continue;
+        addKicker(p.x, p.z, p.dx, p.dz, tryS);
+        break;
+      }
     }
+  } else {
+    for (const k of freeKickers(terrain, rand, buildings)) addKicker(k.x, k.z, k.dx, k.dz, 0);
   }
 
-  route.kickerS = kickers.map(k => k.s);
-  const buildings = buildBuildings(terrain, scene);
-  const stars = placeStars(terrain, route, kickers, rand)
+  const stars = (route ? placeStars(terrain, route, kickers, rand) : freeStars(terrain, rand, buildings).concat(kickerStars(terrain, kickers)))
     .filter(st => !buildings.hit(st.x, st.z, st.y, 2));
   const starMesh = new THREE.InstancedMesh(starGeometry(),
-    new THREE.MeshLambertMaterial({ color: 0xffd23a, emissive: 0x6b4a00 }), stars.length);
+    new THREE.MeshLambertMaterial({ color: 0xffd23a, emissive: 0x6b4a00 }), Math.max(1, stars.length));
+  starMesh.count = stars.length;
   starMesh.frustumCulled = false;
   scene.add(starMesh);
 
-  const trees = placeTrees(terrain, route, rand, buildings);
-  // Trees are drawn in patches so patches out of view are skipped.
-  const treeGeo = treeGeometry();
-  const treeMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-  const patches = new Map();
-  const grid = new Map();
-  for (const t of trees) {
-    const pk = `${Math.floor(t.x / 300)},${Math.floor(t.z / 300)}`;
-    if (!patches.has(pk)) patches.set(pk, []);
-    patches.get(pk).push(t);
-    const key = `${Math.floor(t.x / 10)},${Math.floor(t.z / 10)}`;
-    if (!grid.has(key)) grid.set(key, []);
-    grid.get(key).push(t);
+  // Keep trees off the course line, jumps and buildings. The real cleared runs
+  // already come from the forest map; this just covers small mismatches.
+  const lineHash = new Map();
+  if (route) {
+    for (const p of route.p) {
+      const key = `${Math.floor(p.x / 20)},${Math.floor(p.z / 20)}`;
+      if (!lineHash.has(key)) lineHash.set(key, []);
+      lineHash.get(key).push(p);
+    }
   }
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
-  for (const list of patches.values()) {
-    const mesh = new THREE.InstancedMesh(treeGeo, treeMat, list.length);
-    list.forEach((t, i) => {
-      q.setFromAxisAngle(up, t.yaw);
-      m.compose(new THREE.Vector3(t.x, t.y - 0.3, t.z), q, new THREE.Vector3(t.scale, t.scale, t.scale));
-      mesh.setMatrixAt(i, m);
-    });
-    mesh.computeBoundingSphere();
-    scene.add(mesh);
-  }
+  const nearLine = (x, z, r) => {
+    const ci = Math.floor(x / 20), cj = Math.floor(z / 20);
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+      const list = lineHash.get(`${ci + a},${cj + b}`);
+      if (list) for (const p of list) if ((p.x - x) ** 2 + (p.z - z) ** 2 < r * r) return true;
+    }
+    return false;
+  };
+  const keepClear = (x, z) =>
+    !buildings.clear(x, z, 2) ||
+    kickers.some(k => (k.x - x) ** 2 + (k.z - z) ** 2 < 30 * 30) ||
+    (route && nearLine(x, z, LAYOUT.clearing));
+  const trees = new TreeField(terrain, scene, keepClear);
 
-  const start = route.at(0), end = route.at(route.length);
-  scene.add(boundaryPoles(terrain, route));
-  const [startLabel, endLabel] = terrain.meta.labels || ['START', 'FINISH'];
-  scene.add(gate(terrain, route.at(14), startLabel, '#1d4ed8'));
-  scene.add(gate(terrain, route.at(route.length - 25), endLabel, '#dc2626'));
+  let start, end;
+  if (route) {
+    start = route.at(0); end = route.at(route.length);
+    scene.add(boundaryPoles(terrain, route));
+    const [startLabel, endLabel] = terrain.meta.labels || ['START', 'FINISH'];
+    scene.add(gate(terrain, route.at(14), startLabel, '#1d4ed8'));
+    scene.add(gate(terrain, route.at(route.length - 25), endLabel, '#dc2626'));
+  }
 
   return {
-    route, kickers, stars, starMesh, trees, buildings, start, end,
-    treesNear(x, z) {
-      const out = [];
-      const ci = Math.floor(x / 10), cj = Math.floor(z / 10);
-      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
-        const list = grid.get(`${ci + a},${cj + b}`);
-        if (list) out.push(...list);
-      }
-      return out;
-    },
+    free, route, kickers, stars, starMesh, trees, buildings, start, end,
+    spawns: terrain.meta.spawns || [],
+    treesNear: (x, z) => trees.near(x, z),
   };
 }

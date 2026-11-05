@@ -16,8 +16,9 @@
       <div><span id="speed">0</span> <small>km/h</small></div>
       <div><span id="elev">0</span> <small>m</small></div>
       <div><span id="clock">0:00.0</span></div>
-      <div><span id="togo">–</span> <small>to go</small></div>
+      <div><small id="togo-pre"></small> <span id="togo">–</span> <small id="togo-label">to go</small></div>
     </div>
+    <canvas id="minimap" class="minimap" aria-label="Map of the mountain"></canvas>
     <div class="charge"><div id="charge"></div></div>
     <button id="restart" class="restart" title="Restart (R)">↺</button>
   </div>
@@ -41,19 +42,24 @@
     <p id="course-name" class="sub">Loading…</p>
     <label class="pick">Run
       <select id="course-pick">
+        <option value="freeride">Free ride: whole mountain</option>
         <option value="peak-to-creek">Peak to Creek</option>
         <option value="whistler">Peak to Village</option>
       </select>
     </label>
-    <p class="note">Real terrain from elevation data. Grab the stars, hit the jumps, get to the bottom.</p>
+    <label id="spawn-row" class="pick" hidden>Drop in at
+      <select id="spawn-pick"></select>
+    </label>
+    <p class="note">Real Whistler terrain and real forest from satellite images. Grab the stars, hit the jumps, explore the runs.</p>
     <table class="keys">
       <tr><td>← → or A D</td><td>Carve left and right (spin in the air)</td></tr>
       <tr><td>Space</td><td>Jump — hold for a bigger pop</td></tr>
       <tr><td>↑ or W</td><td>Tuck for speed, or push on the flats</td></tr>
       <tr><td>↓ or S</td><td>Brake</td></tr>
-      <tr><td>R</td><td>Restart from the top</td></tr>
+      <tr><td>R</td><td>Back to the start (or your drop-in spot)</td></tr>
     </table>
     <p id="loading" class="note">Building the mountain…</p>
+    <p class="credits">Elevation: Mapzen Terrarium tiles (AWS Open Data). Forest: contains modified Copernicus Sentinel-2 data (2023). Runs and buildings: © OpenStreetMap contributors.</p>
     <button id="drop" class="go" disabled>Drop in</button>
   </div>
 

@@ -1,20 +1,19 @@
 # Peak Rush
 
 A snowboarding game on real mountains, in the spirit of the 3D stages in Sonic 3:
-fast, behind-the-back, collect stars and hit jumps. Two runs on real Whistler terrain:
+fast, behind-the-back, collect stars and hit jumps. It covers all of **Whistler Mountain**
+(about 9 × 9.6 km): Creekside and the Village up to the Peak, Harmony, Symphony and Flute.
 
-- **Peak to Creek** (default): from the top of the Peak Express (2,175 m) along Peak to Creek
-  Road, then Upper and Lower Peak to Creek to Creekside (~670 m): 5.6 km, 1,508 m vertical.
-- **Peak to Village**: a computed line straight down the north ridge, 6.3 km. Open with `#whistler`.
+Three ways to ride (pick on the start screen):
 
-The Peak to Creek line is the real run, traced from OpenStreetMap ski-run data
-(© OpenStreetMap contributors) shown on CalTopo. The screenshots were lined up with the
-elevation data by matching their contour lines, and the traced points are saved in
-`tools/traces/peak-to-creek.json`. The 142 buildings around Creekside and Kadenwood come from
-the same source (`tools/traces/creekside-buildings.json`): small footprints become chalets with
-pitched roofs, big ones keep their real outline with a snowy flat roof.
+- **Free ride** (default): drop in at Whistler Peak, the Roundhouse, Harmony Ridge, Symphony
+  (Piccolo), Olympic, Creekside or the Village and ride anywhere. Stars and jumps are spread over
+  the real open snow. A minimap shows where you are.
+- **Peak to Creek**: the real run, traced from OpenStreetMap ski-run data (© OpenStreetMap
+  contributors) shown on CalTopo: 5.6 km, 1,508 m vertical. `#peak-to-creek`
+- **Peak to Village**: a line found along the real cleared runs (see Forest below): 6.4 km. `#whistler`
 
-Scoring isn't in yet; this version is about the riding and the physics.
+Scoring isn't in yet; this version is about the riding, the physics and the mountain.
 
 ## Playing
 
@@ -35,20 +34,32 @@ python3 -m http.server 8000
 
 ## Where the mountain comes from
 
-`tools/build_course.py` downloads free elevation tiles (Mapzen "Terrarium" tiles on AWS
-Open Data: SRTM, Canadian CDEM and other public data, about 6 m per pixel here),
-crops the course, smooths it slightly and saves:
+`tools/build_course.py` builds everything from free, open data:
 
-- `data/whistler.png`: the height grid, packed into a lossless image (495 × 635 cells, 12.3 m each)
-- `data/whistler.json`: size, location and a guide line down the mountain
+- **Elevation**: Mapzen "Terrarium" tiles on AWS Open Data (SRTM, Canadian CDEM and others),
+  about 6 m per pixel here, smoothed slightly onto a 12.3 m game grid (`data/whistler.png`).
+- **Forest**: two cloud-free Copernicus Sentinel-2 satellite images at 10 m detail: a sunny
+  late-April image (trees hide the snow, so forest is dark and every run is a white line) and an
+  August image (forest is green, roads/roofs/lakes aren't). Forest = dark in winter **and** green
+  in summer, thinned out between 1,650 and 1,900 m (the real treeline). Saved as
+  `data/whistler-forest.png`. This is what makes the real runs appear as clearings in the trees.
+- **Peak to Creek line and Creekside buildings**: traced from CalTopo screenshots of OpenStreetMap
+  data, aligned to the elevation data by matching contour lines (`tools/traces/`). The traced run
+  sits in the satellite's clearing to within about 12 m.
 
-The guide line is a shortest-path search that prefers 12–30° slopes, avoids cliffs and
-won't go uphill, so it lands on terrain a real rider would choose. Stars, jumps and the
-cleared run through the forest are placed along it when the game loads.
+The BC government 1:20,000 topo sheet (092J006) was checked too. Its contours agree with the
+elevation data, but it has no forest cover over the ski area (it's a private parcel), so the
+satellite images are used for the forest instead.
 
-To add a run, add an entry to `COURSES` in the script, either with a start and finish (the line is
-computed) or with a `trace` file of real lat/lon points, and run
-`python3 tools/build_course.py <id>`, then open `/snowboard/#<id>`.
+To rebuild: `python3 tools/build_course.py` (needs numpy and Pillow; the forest step also
+needs `rasterio`). Add a course to `COURSES` with a start and finish (the line is computed),
+a `trace` file of real lat/lon points, or `"mode": "free"` with drop-in spots.
+
+## Performance
+
+Only the trees within 450 m of you are 3D (rebuilt as you move); further away the forest is
+painted on the ground. Only stars within 450 m are drawn, and terrain beyond 450 m is drawn
+at half detail.
 
 ## Files
 
@@ -59,6 +70,7 @@ js/main.js          scene, camera, controls, game loop
 js/terrain.js       height lookups and the terrain mesh
 js/course.js        stars, jumps, trees, gates (LAYOUT numbers at the top)
 js/buildings.js     Creekside and Kadenwood buildings from real footprints
+js/trees.js         the forest near the rider, from the satellite forest map
 js/rider.js         snowboard physics (PHYSICS numbers at the top) and the rider model
 js/audio.js         synthesized sounds (no audio files)
 tools/build_course.py   real elevation data → course files
@@ -79,6 +91,7 @@ vendor/             three.js r170 (MIT licence)
 ## Ideas for later
 
 - Scoring: stars, airtime, spins, clean landings
-- Blackcomb course (the elevation is already downloaded by the same script)
-- Real run lines from OpenStreetMap's ski-piste data
-- Satellite imagery draped on the terrain
+- Lifts and lodges (Village and Creekside gondolas, Peak Express, Roundhouse Lodge) once their
+  real positions are traced
+- Run names on the HUD from traced run lines
+- Village buildings (only Creekside and Kadenwood are traced so far)

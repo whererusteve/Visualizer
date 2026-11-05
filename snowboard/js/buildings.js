@@ -139,7 +139,7 @@ export function buildBuildings(terrain, scene) {
     const r = Math.max(...pts.map(p => Math.hypot(p[0] - cx, p[1] - cz)));
     hits.push({ pts, cx, cz, r, top: top + 1.2 });
   }
-  if (!pos.length) return { near: () => [] };
+  if (!pos.length) return { list: [], hit: () => null, clear: () => true };
 
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
