@@ -46,6 +46,10 @@ MOUNTAINS = {
         "bounds": (50.1215, -123.0050, 50.0350, -122.8800),
         "zoom": 14,          # about 6 m per pixel at this latitude
         "downsample": 2,     # game grid is about 12 m per cell
+        # Contour lines from the BC government 1:20,000 topo sheet 092J006
+        # (made by tools/topo_contours.py). The terrain is locked to them.
+        "contours": "traces/whistler-contours.png",
+        "smoothLocked": 0,   # extra smoothing passes after locking (the old default was 2)
         "forest": {
             "tiles": ["10/U/EA", "10/U/DA"],  # the map straddles two tiles
             "winter": "2023/4/S2A_{tile}_20230428_0_L2A",   # sunny, full snow cover
@@ -160,9 +164,15 @@ class Grid:
         px_m = 40075016.686 * math.cos(math.radians(lat_mid)) / (2 ** self.z * 256)
         ds = self.ds
         self.H, self.W = raw.shape[0] // ds, raw.shape[1] // ds
-        h = raw[:self.H * ds, :self.W * ds].reshape(self.H, ds, self.W, ds).mean(axis=(1, 3))
-        self.h = blur(h, 2)
         self.cell = px_m * ds
+        self.fine = raw            # full-detail (6 m) heights, before any locking
+        self.h = self.finish(raw, cfg.get("smooth", 2))
+
+    def finish(self, fine, passes):
+        """Average the fine heights onto the game grid, then smooth a little."""
+        ds = self.ds
+        h = fine[:self.H * ds, :self.W * ds].reshape(self.H, ds, self.W, ds).mean(axis=(1, 3))
+        return blur(h, passes) if passes else h
 
     def to_xz(self, lat, lon):
         """Latitude/longitude to game metres."""
@@ -239,6 +249,52 @@ def utm10(lat, lon):
     Nn = k0 * (M + N * np.tan(phi) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A ** 4 / 24
                                       + (61 - 58 * T + T * T + 600 * C - 330 * ep2) * A ** 6 / 720))
     return E, Nn
+
+
+def lock_to_contours(fine, levels, iters=(600, 300, 150, 80)):
+    """Make the terrain pass exactly through a topo map's contour lines.
+
+    levels: same shape as fine, contour elevation in metres on contour cells, 0 elsewhere.
+    The difference (contour - terrain) is known on the lines; in between it is
+    filled in as smoothly as possible (a harmonic surface, solved coarse to fine),
+    so the terrain keeps its own shape but every contour lands where the map has it.
+    Far from any contour (outside the map sheet) the correction fades to zero.
+    """
+    known = levels > 0
+    corr = np.where(known, levels - fine, 0.0)
+    # Cells with no contour within ~150 m are pinned to zero correction.
+    reach = known.astype(float)
+    for _ in range(25):
+        reach = np.maximum(reach, blur(reach, 1) * 9 > 0.5)
+    pinned = known | (reach == 0)
+
+    def solve(c, fixed, n):
+        for _ in range(n):
+            p = np.pad(c, 1, mode="edge")
+            avg = (p[:-2, 1:-1] + p[2:, 1:-1] + p[1:-1, :-2] + p[1:-1, 2:]) / 4
+            c = np.where(fixed, c, avg)
+        return c
+
+    # Coarse to fine: solve on a small grid, enlarge, refine.
+    out = np.zeros_like(corr)
+    prev = None
+    for k, n in zip((8, 4, 2, 1), iters):
+        H, W = (corr.shape[0] // k) * k, (corr.shape[1] // k) * k
+        if k > 1:
+            wsum = known[:H, :W].reshape(H // k, k, W // k, k).sum(axis=(1, 3))
+            csum = (corr * known)[:H, :W].reshape(H // k, k, W // k, k).sum(axis=(1, 3))
+            fixed = (wsum > 0) | (pinned[:H, :W].reshape(H // k, k, W // k, k).all(axis=(1, 3)))
+            cval = np.where(wsum > 0, csum / np.maximum(wsum, 1), 0.0)
+        else:
+            fixed, cval = pinned, corr
+        start = cval.copy()
+        if prev is not None:
+            up = np.repeat(np.repeat(prev, 2, axis=0), 2, axis=1)
+            hh, ww = min(up.shape[0], start.shape[0]), min(up.shape[1], start.shape[1])
+            start[:hh, :ww] = np.where(fixed[:hh, :ww], start[:hh, :ww], up[:hh, :ww])
+        prev = solve(start, fixed, n)
+    out[:prev.shape[0], :prev.shape[1]] = prev
+    return fine + out
 
 
 def build_forest(mid, grid):
@@ -356,6 +412,14 @@ def build_mountain(mid):
         return _mountains[mid]
     cfg = MOUNTAINS[mid]
     grid = Grid(cfg)
+    if "contours" in cfg and os.path.exists(os.path.join(HERE, cfg["contours"])):
+        lv = np.asarray(Image.open(os.path.join(HERE, cfg["contours"]))).astype(float)
+        hh, ww = min(lv.shape[0], grid.fine.shape[0]), min(lv.shape[1], grid.fine.shape[1])
+        fine = grid.fine.copy()
+        fine[:hh, :ww] = lock_to_contours(grid.fine[:hh, :ww], lv[:hh, :ww])
+        grid.fine = fine
+        grid.h = grid.finish(fine, cfg.get("smoothLocked", 0))
+        print(f"{mid}: terrain locked to {int((lv > 0).sum())} topo-map contour cells")
     os.makedirs(OUT, exist_ok=True)
     dm = np.clip(np.round(grid.h * 10), 0, 65535).astype("<u2")
     rgb = np.zeros((grid.H, grid.W, 3), np.uint8)

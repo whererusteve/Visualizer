@@ -76,9 +76,15 @@ python3 -m http.server 8000
   data, aligned to the elevation data by matching contour lines (`tools/traces/`). The traced run
   sits in the satellite's clearing to within about 12 m.
 
-The BC government 1:20,000 topo sheet (092J006) was checked too. Its contours agree with the
-elevation data, but it has no forest cover over the ski area (it's a private parcel), so the
-satellite images are used for the forest instead.
+- **Topo map lock**: the contour lines of the BC government 1:20,000 topo sheet 092J006 (20 m
+  contours, a GeoPDF that says exactly where it sits on the ground) are read by
+  `tools/topo_contours.py` into `tools/traces/whistler-contours.png`. The build then makes the
+  terrain pass through every contour, filling in smoothly between them, and skips the extra
+  smoothing it used before. Result: the terrain matches the map's contours to 1.5 m on average
+  (worst 1%: 4.6 m; before: 3.1 m and 9.3 m), with sharper ridges and gullies. The sheet's south
+  edge is at 50.112°N, so the strip north of that (the Village) keeps the plain elevation data.
+  The topo sheet has no forest cover over the ski area (a private parcel), so the satellite
+  images are used for the forest.
 
 To rebuild: `python3 tools/build_course.py` (needs numpy and Pillow; the forest step also
 needs `rasterio`). Add a course to `COURSES` with a start and finish (the line is computed),
@@ -99,12 +105,13 @@ js/main.js          scene, camera, controls, game loop
 js/terrain.js       height lookups and the terrain mesh
 js/course.js        stars, jumps, trees, gates (LAYOUT numbers at the top)
 js/buildings.js     Creekside and Kadenwood buildings from real footprints
-js/trees.js         the forest near the rider, from the satellite forest map
+js/trees.js         the forest near the rider, from the satellite forest map (trees 16-33 m tall, like the real coastal forest)
 js/outfit.js        clothes, boards (shapes and handling) and the rider model
 js/lifts.js         lifts: towers, cables, chairs and cabins, riding
 js/rider.js         snowboard physics (PHYSICS numbers at the top) and the rider model
 js/audio.js         synthesized sounds (no audio files)
 tools/build_course.py   real elevation data → course files
+tools/topo_contours.py  topo-map contours → tools/traces/whistler-contours.png
 vendor/             three.js r170 (MIT licence)
 ```
 

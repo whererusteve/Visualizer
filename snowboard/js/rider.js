@@ -227,7 +227,7 @@ export class Rider {
     for (const t of course.treesNear(this.p.x, this.p.z)) {
       const dx = this.p.x - t.x, dz = this.p.z - t.z;
       const r = 0.55 + 0.9 * t.scale;
-      if (dx * dx + dz * dz < r * r && this.p.y < t.y + 9 * t.scale) {
+      if (dx * dx + dz * dz < r * r && this.p.y < t.y + 9 * t.scale * 2.2) {
         const d = Math.hypot(dx, dz) || 1;
         this.p.x = t.x + dx / d * r; this.p.z = t.z + dz / d * r;
         this.v.multiplyScalar(0.15);

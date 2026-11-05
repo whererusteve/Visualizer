@@ -10,6 +10,9 @@ const SPACING = 7.5;     // metres between possible tree spots
 const BLOCK = 10;        // tree spots per block side (blocks are 75 m squares)
 const NEAR = 450;        // draw 3D trees this far around the rider
 const MAX_TREES = 14000;
+// Coast Mountain firs and hemlocks are tall and narrow: 16-33 m here.
+// The model is ~10.6 m at scale 1, so it is stretched upward by TALL.
+export const TALL = 2.2;
 
 function hash(i, j, k) {
   let h = Math.imul(i, 374761393) ^ Math.imul(j, 668265263) ^ Math.imul(k, 2147483647);
@@ -111,7 +114,7 @@ export class TreeField {
       for (const t of this.block(a, b)) {
         if (n >= MAX_TREES) break;
         q.setFromAxisAngle(up, t.yaw);
-        m.compose(v.set(t.x, t.y - 0.3, t.z), q, s.setScalar(t.scale));
+        m.compose(v.set(t.x, t.y - 0.3, t.z), q, s.set(t.scale, t.scale * TALL, t.scale));
         this.mesh.setMatrixAt(n++, m);
       }
     }
