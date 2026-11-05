@@ -316,14 +316,16 @@ const STEP = 1 / 120;
 let acc = 0, last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.1, (now - last) / 1000);
+  // Cap at 0.25 s (e.g. after switching tabs), but otherwise always keep up with real
+  // time, so a slow phone never plays in slow motion.
+  const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
   const t = now / 1000;
   if (game.state === 'playing' || game.state === 'finished') {
     acc += dt;
     const input = readInput();
     let n = 0;
-    while (acc >= STEP && n++ < 10) {
+    while (acc >= STEP && n++ < 30) {
       rider.step(STEP, input);
       rider.checkTrees(course);
       acc -= STEP;

@@ -7,15 +7,15 @@ export const PHYSICS = {
   gravity: 9.81,
   snowFriction: 0.035,  // gliding friction on groomed snow
   brakeFriction: 0.45,  // skidding sideways to slow down
-  drag: 0.0056,         // air resistance; sets top speed (~100 km/h on a steep pitch)
-  tuckDrag: 0.0036,     // crouched "tuck" for more speed
+  drag: 0.0085,         // air resistance; sets top speed (~70-80 km/h on a steep pitch)
+  tuckDrag: 0.0058,     // crouched "tuck" for more speed
   edgeGrip: 7,          // how hard the edge stops sideways sliding (higher = sharper carve)
   carveKeep: 0.55,      // share of sideways speed turned into forward speed in a carve
   turnSlow: 2.4,        // turn rate (radians/s) at low speed
   turnFast: 1.15,       // turn rate at high speed
   push: 3,              // skating push on flats (m/s²)
-  ollie: 4.2,           // basic jump pop (m/s)
-  ollieCharged: 3.2,    // extra pop when the jump is held for a moment
+  ollie: 2.6,           // basic jump pop (m/s): about 0.35 m off the snow, like a real ollie
+  ollieCharged: 1.6,    // extra pop when held: up to about 0.9 m, a strong ollie
   airSpin: 6.5,         // spin speed in the air (radians/s)
   crashImpact: 21,      // landing this hard (m/s into the slope) is a wipeout
   crashAngle: 0.45,     // land more than ~63° sideways and you wipe out

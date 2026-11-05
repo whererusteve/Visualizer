@@ -8,7 +8,7 @@ import { buildBuildings } from './buildings.js';
 export const LAYOUT = {
   starEvery: 85,        // metres between star patterns
   jumpEvery: 300,       // metres between jumps
-  jumpSize: { length: 12, width: 8, height: 2.4 },
+  jumpSize: { length: 10, width: 8, height: 1.6 }, // a medium park jump
   treeline: 1720,       // metres above sea level; no trees above this
   treeSpacing: 13,      // metres between tree candidates
   runWidth: { base: 21, swing: 5 }, // half-width of the cleared run, metres
@@ -169,7 +169,7 @@ function placeStars(terrain, route, kickers, rand) {
     const ahead = terrain.terrainHeight(k.lip.x + k.dx * 10, k.lip.z + k.dz * 10);
     const slope = Math.atan2(lipY - k.Hh - ahead, 10);       // ground falls away
     const pitch = Math.atan(2 * k.Hh / k.L) - slope;         // launch angle
-    const v = 23;
+    const v = 17;
     for (let i = 1; i <= 7; i++) {
       const t = i * 0.17;
       const d = v * Math.cos(pitch) * t;
