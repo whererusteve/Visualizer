@@ -185,7 +185,7 @@ export class Rider {
       if (f.dot(h) < 0) target += Math.PI;
       this.yaw = target;
     }
-    this.events.push(turns >= 180 ? { type: 'trick', spin: turns } : 'land');
+    this.events.push({ type: 'land', spin: turns, air: this.airTime });
   }
 
   crash() {
@@ -255,13 +255,27 @@ export class Rider {
     m.body.position.y = 0.95 - c * 0.45;
     m.legs.scale.y = 1 - c * 0.5;
     m.body.rotation.x = 0;
+    // Sitting on a chairlift: hips on the seat, face forward, knees out in front,
+    // board hanging off the front foot. (Local -x is the way the rider faces.)
+    const sit = this.seated;
+    m.legs.rotation.z = sit ? -0.95 : 0;
+    m.legs.position.set(sit ? -0.5 : 0, sit ? -0.4 : 0, 0);
+    m.board.rotation.z = sit ? -0.95 : 0;
+    m.board.position.copy(m.legs.position);
+    if (sit) {
+      m.body.position.y = 0.15;
+      m.body.rotation.y = 0;
+      m.arms.rotation.z = 0.5; // hands resting on the knees
+    } else {
+      m.body.rotation.y = this.outfit.stance === 'goofy' ? Math.PI : 0;
+    }
     if (this.crashed > 0) {
       m.lean.rotation.z = Math.sin(time * 9) * 1.2;
       m.lean.rotation.x = time * 7;
     } else {
       m.lean.rotation.x = 0;
     }
-    m.arms.rotation.z = this.contact ? -this.lean * 0.8 : Math.sin(time * 6) * 0.3;
+    if (!sit) m.arms.rotation.z = this.contact ? -this.lean * 0.8 : Math.sin(time * 6) * 0.3;
 
     const g = this.terrain.groundHeight(this.p.x, this.p.z);
     const sn = this.terrain.normalAt(this.p.x, this.p.z);

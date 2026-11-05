@@ -20,11 +20,6 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .stars { left: 12px; font-size: 22px; }
 .star-icon { color: var(--gold); text-shadow: 0 0 8px rgba(255, 197, 49, 0.8); }
 .pill.right { right: 12px; text-align: right; font-size: 15px; line-height: 1.45; min-width: 110px; }
-.restart {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  pointer-events: auto; border: 0; border-radius: 50%; width: 40px; height: 40px;
-  background: rgba(15, 23, 42, 0.45); color: #fff; font-size: 20px; cursor: pointer;
-}
 .minimap {
   position: absolute; left: 12px; top: 64px; width: 130px; height: auto;
   border-radius: 10px; border: 2px solid rgba(255, 255, 255, 0.8);
@@ -145,3 +140,21 @@ body.in-locker .touch, body.in-locker .minimap, body.in-locker .hud .pill.stars 
 }
 .lift-prompt small { opacity: 0.75; font-weight: 500; }
 @media (pointer: coarse) { .lift-prompt small { display: none; } .lift-prompt { bottom: 140px; } }
+
+/* Top-centre buttons: main menu and restart */
+.topbtns { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.roundbtn {
+  pointer-events: auto; border: 0; border-radius: 50%; width: 40px; height: 40px;
+  background: rgba(15, 23, 42, 0.45); color: #fff; font-size: 20px; cursor: pointer;
+}
+.roundbtn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+/* Gnar points under the star count */
+.pill.gnar { left: 12px; top: 60px; font-size: 18px; }
+.pill.gnar small { font-size: 11px; letter-spacing: 0.08em; opacity: 0.8; }
+.pill.gnar #combo { color: var(--gold); letter-spacing: 0; font-size: 13px; opacity: 1; }
+.minimap { top: 108px; }
+.toast .pts { display: block; font-size: 26px; color: var(--gold); text-shadow: 0 2px 0 #7a4a00; }
+.toast .what { display: block; font-size: 30px; }
+body.in-locker .pill.gnar { display: none; }
+.lift-prompt.skip { background: rgba(15, 23, 42, 0.6); bottom: 14%; }
+@media (pointer: coarse) { .lift-prompt.skip { bottom: 130px; } }

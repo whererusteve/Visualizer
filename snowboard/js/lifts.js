@@ -6,7 +6,8 @@ import * as THREE from '../vendor/three.module.min.js';
 const TOWER_EVERY = 110;   // metres between towers
 const CLEAR = 9;           // cable height above the snow at each tower
 const CARRIER_EVERY = 45;  // metres between chairs or cabins
-const RIDE_SECONDS = 14;   // any ride takes about this long (real rides take 5-20 minutes)
+const RIDE_SPEED = 25;     // m/s while you ride: a sped-up view (real lifts move about 5 m/s)
+const RIDE_MAX = 45;       // seconds; longer lifts go a little faster. You can skip ahead.
 const SPEED = 5;           // metres per second the carriers visibly move
 
 function makeLift(terrain, def) {
@@ -141,7 +142,7 @@ export function buildLifts(terrain, scene) {
       if (c.side < 0) s = L.length - s;
       cableAt(L, s, c.side, v);
       if ((v.x - near.x) ** 2 + (v.z - near.z) ** 2 > 1500 * 1500) continue;
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(L.dir.x, L.dir.z) + Math.PI / 2);
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(L.dir.x, L.dir.z) + (c.side < 0 ? Math.PI : 0));
       m.compose(v, q, sc.set(1, 1, 1));
       hangerMesh.setMatrixAt(hi++, m);
       if (L.type === 'gondola') cabinMesh.setMatrixAt(ki++, m); else chairMesh.setMatrixAt(ci++, m);
@@ -168,7 +169,7 @@ export function buildLifts(terrain, scene) {
     const dist = lift.length - start;
     return {
       lift, start, dist, t: 0,
-      duration: Math.min(RIDE_SECONDS, Math.max(6, dist / 60)),
+      duration: Math.min(RIDE_MAX, Math.max(5, dist / RIDE_SPEED)),
       pos(out) { return cableAt(lift, start + dist * Math.min(1, this.t / this.duration), 1, out); },
     };
   }
@@ -176,9 +177,14 @@ export function buildLifts(terrain, scene) {
   // The chair or cabin you are riding in, drawn at your position.
   const myChair = new THREE.Group();
   myChair.add(new THREE.Mesh(chairGeo, chairMat), new THREE.Mesh(hangerGeo, steel));
-  const back = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.8, 0.12), chairMat);
-  back.position.set(0, -2.15, 0.35);
-  myChair.add(back);
+  // Seat back behind you, footrest and safety bar in front.
+  const back = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.8, 0.1), chairMat);
+  back.position.set(0, -2.1, -0.36);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.06, 0.06), steel);
+  bar.position.set(0, -1.95, 0.55);
+  const rest = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.25), steel);
+  rest.position.set(0, -3.05, 0.75);
+  myChair.add(back, bar, rest);
   const myCabin = new THREE.Group();
   const glass = new THREE.MeshLambertMaterial({ color: 0x9ec5e8, transparent: true, opacity: 0.35 });
   const shell = new THREE.Mesh(cabinGeo, glass);
@@ -196,10 +202,10 @@ export function buildLifts(terrain, scene) {
     if (!lift) return;
     const c = gondola ? myCabin : myChair;
     c.position.copy(pos);
-    c.rotation.set(0, Math.atan2(lift.dir.x, lift.dir.z) + Math.PI / 2, 0);
+    c.rotation.set(0, Math.atan2(lift.dir.x, lift.dir.z) + (gondola ? Math.PI / 2 : 0), 0);
   }
   // Seat height below the cable: on the chair bench, or standing on the cabin floor.
-  const seatDrop = lift => (lift.type === 'gondola' ? 3.75 : 2.6);
+  const seatDrop = lift => (lift.type === 'gondola' ? 3.75 : 2.47); // seat top is 2.47 m below the cable
 
   return { lifts, update, boardable, ride, carry, seatDrop, keepClear: signs };
 }

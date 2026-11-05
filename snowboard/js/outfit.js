@@ -104,20 +104,22 @@ export function buildRiderModel(o) {
   const C = (group, name) => COLORS[group][name] ?? Object.values(COLORS[group])[0];
 
   // Board, with a two-tone top sheet
+  const boardGroup = new THREE.Group();
+  lean.add(boardGroup);
   const b = BOARDS[o.board];
   const w = b.width / 2, L = b.length / 2;
-  lean.add(new THREE.Mesh(flatPiece(boardShape(b.shape, w, L), 0.035, 0.0),
+  boardGroup.add(new THREE.Mesh(flatPiece(boardShape(b.shape, w, L), 0.035, 0.0),
     [mat(C('board', o.boardColor)), mat(0x2a2a2a)]));
   const deco = new THREE.Shape();
   deco.moveTo(-w * 0.35, -L * 0.62); deco.lineTo(w * 0.35, -L * 0.62);
   deco.lineTo(w * 0.35, L * 0.62); deco.lineTo(-w * 0.35, L * 0.62); deco.closePath();
-  lean.add(new THREE.Mesh(flatPiece(deco, 0.004, 0.035), mat(C('accent', o.accent))));
+  boardGroup.add(new THREE.Mesh(flatPiece(deco, 0.004, 0.035), mat(C('accent', o.accent))));
   // Bindings
   for (const z of [-0.24, 0.24]) {
     const bind = new THREE.Mesh(new THREE.BoxGeometry(b.width * 0.95, 0.05, 0.2), mat(0x1a1a1a));
     bind.position.set(0, 0.06, z);
     bind.rotation.y = z > 0 ? 0.25 : -0.15;
-    lean.add(bind);
+    boardGroup.add(bind);
   }
 
   // Legs (scaled when crouching)
@@ -225,5 +227,5 @@ export function buildRiderModel(o) {
   // Goofy riders lead with the right foot, so they face the other edge.
   if (o.stance === 'goofy') body.rotation.y = Math.PI;
   lean.add(body);
-  return { root, lean, body, legs, arms, up: new THREE.Vector3(0, 1, 0) };
+  return { root, lean, body, legs, arms, board: boardGroup, up: new THREE.Vector3(0, 1, 0) };
 }

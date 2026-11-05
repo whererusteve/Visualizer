@@ -12,16 +12,21 @@
 
   <div class="hud" aria-live="off">
     <div class="pill stars"><span class="star-icon">★</span> <span id="stars">0 / 0</span></div>
+    <div class="pill gnar"><small>GNAR</small> <span id="gnar">0</span> <small id="combo"></small></div>
     <div class="pill right">
       <div><span id="speed">0</span> <small>km/h</small></div>
       <div><span id="elev">0</span> <small>m</small></div>
       <div><span id="clock">0:00.0</span></div>
       <div><small id="togo-pre"></small> <span id="togo">–</span> <small id="togo-label">to go</small></div>
     </div>
+    <button id="lift-skip" class="lift-prompt skip" hidden>Skip to top ⏩ <small>(Space)</small></button>
     <button id="lift-prompt" class="lift-prompt" hidden>Ride <strong id="lift-name"></strong> <small>(L)</small></button>
     <canvas id="minimap" class="minimap" aria-label="Map of the mountain"></canvas>
     <div class="charge"><div id="charge"></div></div>
-    <button id="restart" class="restart" title="Restart (R)">↺</button>
+    <div class="topbtns">
+      <button id="menu" class="roundbtn" title="Main menu (Esc)" aria-label="Main menu">☰</button>
+      <button id="restart" class="roundbtn" title="Restart (R)" aria-label="Restart">↺</button>
+    </div>
   </div>
 
   <div id="toast" class="toast"></div>
@@ -51,6 +56,7 @@
     <label id="spawn-row" class="pick" hidden>Drop in at
       <select id="spawn-pick"></select>
     </label>
+    <p class="note">Spins and airtime earn <strong>gnar points</strong>. Land tricks back to back for a combo multiplier.</p>
     <p class="note">Real Whistler terrain and real forest from satellite images. Grab the stars, hit the jumps, explore the runs.</p>
     <table class="keys">
       <tr><td>← → or A D</td><td>Carve left and right (spin in the air)</td></tr>
@@ -59,11 +65,13 @@
       <tr><td>↓ or S</td><td>Brake</td></tr>
       <tr><td>L</td><td>Ride a lift (stop near its bottom station)</td></tr>
       <tr><td>R</td><td>Back to the start (or your drop-in spot)</td></tr>
+      <tr><td>Esc</td><td>Main menu</td></tr>
     </table>
     <p id="loading" class="note">Building the mountain…</p>
     <p class="credits">Elevation: Mapzen Terrarium tiles (AWS Open Data). Forest: contains modified Copernicus Sentinel-2 data (2023). Runs and buildings: © OpenStreetMap contributors.</p>
     <div class="intro-actions">
       <button id="locker-open" class="ghost">Rider &amp; board</button>
+      <button id="resume" class="go" hidden>Resume</button>
       <button id="drop" class="go" disabled>Drop in</button>
     </div>
   </div>
@@ -78,7 +86,12 @@
     <h1>Made it!</h1>
     <p class="big">Time <strong id="f-time"></strong></p>
     <p class="big">Stars <strong id="f-stars"></strong></p>
-    <button id="again" class="go">Ride again</button>
+    <p class="big">Gnar points <strong id="f-gnar"></strong></p>
+    <p id="f-best" class="note"></p>
+    <div class="intro-actions">
+      <button id="f-menu" class="ghost">Main menu</button>
+      <button id="again" class="go">Ride again</button>
+    </div>
   </div>
 
   <script type="module" src="js/main.js"></script>

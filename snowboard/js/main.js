@@ -194,8 +194,10 @@ const KEYMAP = {
 window.addEventListener('keydown', e => {
   if (KEYMAP[e.code]) { keys.add(KEYMAP[e.code]); e.preventDefault(); }
   if (e.code === 'KeyR') restart();
+  if (e.code === 'Escape') { if (game.state === 'intro' && game.resumeState) resume(); else openMenu(); }
   if (e.code === 'KeyL' || (e.code === 'KeyE')) boardLift();
-  if (e.code === 'Enter' && game.state !== 'playing' && game.state !== 'locker') begin();
+  if (e.code === 'Space' && game.state === 'riding') skipRide();
+  if (e.code === 'Enter' && (game.state === 'intro' || game.state === 'finished')) begin();
 });
 window.addEventListener('keyup', e => { if (KEYMAP[e.code]) keys.delete(KEYMAP[e.code]); });
 window.addEventListener('blur', () => keys.clear());
@@ -220,7 +222,8 @@ function readInput() {
 
 // ---------- Game state ----------
 const sound = new Sound();
-const game = { state: 'loading', time: 0, stars: 0, routeIndex: 0, toastTimer: 0, spawn: 0 };
+const game = { state: 'loading', time: 0, stars: 0, routeIndex: 0, toastTimer: 0, spawn: 0,
+  gnar: 0, combo: 1, lastTrick: -99, resumeState: null };
 let terrain, course, rider, spray;
 
 function fmtTime(t) {
@@ -252,7 +255,9 @@ function placeClear(x, z) {
 function restart() {
   if (!course) return;
   ride = null;
+  rider.seated = false;
   course.lifts.carry(null);
+  $('lift-skip').hidden = true;
   if (game.state === 'riding') game.state = 'playing';
   if (course.route) {
     const s = course.route.at(0), a = course.route.at(25);
@@ -265,13 +270,42 @@ function restart() {
   }
   resetStarMatrices();
   game.stars = 0; game.time = 0; game.routeIndex = 0;
+  game.gnar = 0; game.combo = 1; game.lastTrick = -99;
+  rider.events.length = 0;
   havePrev = false;
   $('finish').hidden = true;
   if (game.state === 'finished') game.state = 'playing';
   snapCamera();
 }
 
+// Main menu: pauses the game. Resume carries on; Drop in starts the run over.
+function openMenu() {
+  if (game.state === 'intro' || game.state === 'loading') return;
+  if (game.state === 'locker') { openLocker(false); return; }
+  game.resumeState = game.state === 'finished' ? null : game.state;
+  game.state = 'intro';
+  $('finish').hidden = true;
+  $('intro').hidden = false;
+  $('resume').hidden = !game.resumeState;
+  $('drop').textContent = 'Restart run';
+  game.restartOnDrop = true;
+  keys.clear();
+}
+function resume() {
+  $('intro').hidden = true;
+  game.state = game.resumeState || 'playing';
+  game.resumeState = null;
+  last = performance.now();
+}
+
 function begin() {
+  if (game.restartOnDrop) {
+    // Coming from the main menu: start the run over.
+    game.restartOnDrop = false;
+    game.resumeState = null;
+    restart();
+  }
+  $('resume').hidden = true;
   sound.start();
   document.activeElement?.blur();
   $('intro').hidden = true;
@@ -287,6 +321,18 @@ function snapCamera() {
   rider.forward(camDir);
   updateCamera(1, true);
 }
+// On a chairlift: a three-quarter view from behind and to the side, so you see
+// the rider sitting with the board hanging, and the lift line ahead.
+function chairCamera(dt) {
+  const p = rider.p, d = ride.lift.dir;
+  // beside the chair, slightly ahead, looking back across at the rider and up the line
+  const want = new THREE.Vector3(p.x + d.x * 1.2 + d.z * 4.6, p.y + 1.0, p.z + d.z * 1.2 - d.x * 4.6);
+  camera.position.copy(want); // locked to the chair, which moves smoothly anyway
+  camera.lookAt(p.x + d.x * 1.5, p.y + 0.3, p.z + d.z * 1.5);
+  if (camera.fov !== 60) { camera.fov = 60; camera.updateProjectionMatrix(); }
+  sky.position.copy(camera.position);
+}
+
 // In the locker, look at the rider from the front so you can see the outfit.
 function lockerCamera(t) {
   const p = rider.p, f = rider.forward();
@@ -307,9 +353,12 @@ function lockerCamera(t) {
 }
 function updateCamera(dt, snap = false) {
   if (camera.view && camera.view.enabled) camera.clearViewOffset();
+  if (ride && ride.lift.type !== 'gondola') { chairCamera(dt); return; }
   const p = rider.p, v = rider.v;
   const hs = Math.hypot(v.x, v.z);
-  const want = hs > 2 ? new THREE.Vector3(v.x / hs, 0, v.z / hs) : rider.forward();
+  // On a lift, look up the lift line; otherwise follow the direction of travel.
+  const want = ride ? new THREE.Vector3(ride.lift.dir.x, 0, ride.lift.dir.z)
+    : hs > 2 ? new THREE.Vector3(v.x / hs, 0, v.z / hs) : rider.forward();
   camDir.lerp(want, snap ? 1 : 1 - Math.exp(-2.5 * dt)).normalize();
   const speed = v.length();
   const dist = 6.5 + Math.min(speed, 40) * 0.06;
@@ -539,6 +588,9 @@ function drawMinimap() {
 
 // ---------- HUD ----------
 function updateHud() {
+  $('gnar').textContent = game.gnar.toLocaleString();
+  const comboLive = game.combo > 1 && performance.now() / 1000 - game.lastTrick < GNAR.comboWindow;
+  $('combo').textContent = comboLive ? `×${game.combo}` : '';
   $('stars').textContent = course.route ? `${game.stars} / ${course.stars.length}` : `${game.stars}`;
   $('speed').textContent = Math.round(rider.speed() * 3.6);
   $('elev').textContent = Math.round(rider.p.y + terrain.base);
@@ -562,12 +614,48 @@ function updateHud() {
   $('charge').parentElement.style.opacity = rider.charge > 0 ? 1 : 0;
 }
 
-function handleEvents() {
+// ---------- Gnar points ----------
+// Airtime and spins score on a clean landing. Land tricks within COMBO_WINDOW
+// seconds of each other to build a multiplier; a wipeout loses the trick and the combo.
+const GNAR = {
+  minAir: 0.6,            // seconds: shorter hops don't score
+  airPoints: t => Math.round(60 * Math.pow(t, 1.6)),        // 1 s = 60, 2 s = 182, 3 s = 349
+  spinPoints: { 180: 150, 360: 400, 540: 750, 720: 1200, 900: 1800, 1080: 2500 },
+  comboWindow: 4,         // seconds
+  maxCombo: 4,
+};
+function spinScore(deg) {
+  if (deg < 180) return 0;
+  return GNAR.spinPoints[deg] ?? 2500 + (deg - 1080) / 180 * 800;
+}
+function scoreLanding(e, now) {
+  const air = e.air >= GNAR.minAir ? GNAR.airPoints(e.air) : 0;
+  const spin = spinScore(e.spin);
+  if (!air && !spin) return;
+  game.combo = now - game.lastTrick < GNAR.comboWindow ? Math.min(GNAR.maxCombo, game.combo + 0.5) : 1;
+  game.lastTrick = now;
+  const pts = Math.round((air + spin) * game.combo);
+  game.gnar += pts;
+  const what = [e.spin >= 180 ? `${e.spin}` : '', e.air >= GNAR.minAir ? `${e.air.toFixed(1)} s air` : '']
+    .filter(Boolean).join(' · ');
+  toastHtml(what, `+${pts.toLocaleString()} gnar${game.combo > 1 ? ` ×${game.combo}` : ''}`);
+}
+function toastHtml(what, pts) {
+  const el = $('toast');
+  el.textContent = '';
+  const a = document.createElement('span'); a.className = 'what'; a.textContent = what;
+  const b = document.createElement('span'); b.className = 'pts'; b.textContent = pts;
+  el.append(a, b);
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+}
+
+function handleEvents(now) {
   for (const e of rider.events) {
     if (e === 'jump') sound.jump();
-    else if (e === 'land') sound.land();
-    else if (e === 'crash') { sound.crash(); toast('Wipeout!'); }
-    else if (e.type === 'trick') { sound.land(); toast(`${e.spin}!`); }
+    else if (e === 'crash') {
+      sound.crash(); toast('Wipeout!');
+      game.combo = 1; game.lastTrick = -99;
+    } else if (e.type === 'land') { sound.land(); scoreLanding(e, now); }
   }
   rider.events.length = 0;
 }
@@ -600,7 +688,7 @@ function frame(now) {
         if (near.s > course.route.length - 30 && near.distance < 60) finish();
       }
     }
-    handleEvents();
+    handleEvents(t);
     if (rider.contact && rider.carve > 0.15 && rider.crashed <= 0) spray.emit(rider.p, rider.v, rider.carve, dt);
     sound.update(rider.speed(), rider.carve, rider.contact);
   }
@@ -626,11 +714,14 @@ function updateLiftPrompt() {
     if (o) $('lift-name').textContent = o.lift.name;
   }
 }
+// Jump to the last couple of seconds of the ride.
+function skipRide() { if (ride) ride.t = Math.max(ride.t, ride.duration - 2); }
 function boardLift() {
   if (!offer || game.state !== 'playing') return;
   ride = course.lifts.ride(offer.lift, offer.from);
   game.state = 'riding';
   $('lift-prompt').hidden = true;
+  $('lift-skip').hidden = false;
   toast(offer.lift.name);
   offer = null;
 }
@@ -638,17 +729,22 @@ const _ride = new THREE.Vector3();
 function rideStep(dt) {
   ride.t += dt;
   ride.pos(_ride);
-  rider.p.set(_ride.x, _ride.y - course.lifts.seatDrop(ride.lift), _ride.z);
+  const d = ride.lift.dir, chair = ride.lift.type !== 'gondola';
   course.lifts.carry(ride.lift, _ride);
-  rider.v.set(ride.lift.dir.x, 0, ride.lift.dir.z).multiplyScalar(0.01);
-  rider.yaw = Math.atan2(ride.lift.dir.x, ride.lift.dir.z);
+  // Sit one seat over from the centre hanger, facing up the lift.
+  rider.p.set(_ride.x + (chair ? -d.z * 0.55 : 0), _ride.y - course.lifts.seatDrop(ride.lift), _ride.z + (chair ? d.x * 0.55 : 0));
+  rider.seated = chair;
+  rider.v.set(0, 0, 0);
+  rider.yaw = chair ? Math.atan2(d.z, -d.x) : Math.atan2(d.x, d.z);
   rider.contact = false;
   if (ride.t >= ride.duration) {
     // Unload: step off just past the top station, facing downhill.
     const top = ride.lift.st[ride.lift.st.length - 1];
     placeClear(top.x + ride.lift.dir.x * 12, top.z + ride.lift.dir.z * 12);
     ride = null;
+    rider.seated = false;
     course.lifts.carry(null);
+    $('lift-skip').hidden = true;
     game.state = 'playing';
     havePrev = false;
     snapCamera();
@@ -660,6 +756,14 @@ function finish() {
   sound.finish();
   $('f-time').textContent = fmtTime(game.time);
   $('f-stars').textContent = `${game.stars} of ${course.stars.length}`;
+  $('f-gnar').textContent = game.gnar.toLocaleString();
+  const key = `peakrush.best.${COURSE_ID}`;
+  let best = 0;
+  try { best = +localStorage.getItem(key) || 0; } catch { /* storage off */ }
+  if (game.gnar > best) {
+    try { localStorage.setItem(key, String(game.gnar)); } catch { /* storage off */ }
+    $('f-best').textContent = best ? `New best! (was ${best.toLocaleString()})` : 'First score on this run.';
+  } else $('f-best').textContent = `Best on this run: ${best.toLocaleString()}`;
   $('finish').hidden = false;
 }
 
@@ -696,6 +800,10 @@ async function init() {
   $('drop').addEventListener('click', begin);
   $('locker-open').addEventListener('click', () => openLocker(true));
   $('lift-prompt').addEventListener('click', boardLift);
+  $('lift-skip').addEventListener('click', skipRide);
+  $('menu').addEventListener('click', openMenu);
+  $('resume').addEventListener('click', resume);
+  $('f-menu').addEventListener('click', openMenu);
   $('locker-done').addEventListener('click', () => openLocker(false));
   $('again').addEventListener('click', () => { restart(); begin(); });
   $('restart').addEventListener('click', () => { restart(); });

@@ -380,9 +380,14 @@ export function buildCourse(terrain, scene) {
     return false;
   };
   // Lift lines are cut through the forest too: keep trees off towers and stations.
-  const liftSpots = [];
-  for (const L of lifts.lifts) for (const p of L.pts) liftSpots.push(p);
-  const nearLift = (x, z) => liftSpots.some(p => (p.x - x) ** 2 + (p.z - z) ** 2 < 14 * 14);
+  // Distance to every lift segment (station to station): a 12 m-wide cut each side.
+  const segs = [];
+  for (const L of lifts.lifts) for (let i = 1; i < L.st.length; i++) segs.push([L.st[i - 1], L.st[i]]);
+  const nearLift = (x, z) => segs.some(([a, b]) => {
+    const dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz;
+    const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / l2));
+    return (a.x + dx * t - x) ** 2 + (a.z + dz * t - z) ** 2 < 12 * 12;
+  });
   const keepClear = (x, z) =>
     !buildings.clear(x, z, 2) || nearLift(x, z) ||
     kickers.some(k => (k.x - x) ** 2 + (k.z - z) ** 2 < 30 * 30) ||

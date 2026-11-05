@@ -29,12 +29,20 @@ Choices are saved on your device.
 **Lifts**: 12 real lifts with towers, cables and moving chairs or gondola cabins: Whistler
 Village Gondola (via Olympic), Fitzsimmons, Olympic Chair, Garbanzo, Emerald 6, Creekside
 Gondola, Big Red, Kadenwood Gondola, Peak Express, Harmony 6, Symphony, and Peak 2 Peak (towards
-Blackcomb). Stop near a bottom station and press **L** (or tap the red button) to ride to the top;
-a ride takes about 14 seconds. Lift tops are also drop-in spots in free ride. Lift lines come from
+Blackcomb). Stop near a bottom station and press **L** (or tap the red button) to ride to the top
+(sped up to 25 m/s; Space or the Skip button jumps ahead). On chairs you sit facing up the line
+with the board hanging off your front foot; on gondolas you stand in a glass cabin. Lift tops are also drop-in spots in free ride. Lift lines come from
 CalTopo screenshots of OpenStreetMap data (`tools/traces/lifts.json`); station heights match
 published values within about 20 m (Roundhouse 1,845 m, Peak 2,178 m, Piccolo 2,008 m, Olympic 1,028 m).
 
-Scoring isn't in yet; this version is about the riding, the physics and the mountain.
+**Gnar points**: clean landings score for airtime (from 0.6 s: 1 s = 60, 2 s = 182, 3 s = 349)
+and spins (180 = 150, 360 = 400, 540 = 750, 720 = 1,200, 900 = 1,800, 1080 = 2,500). Land tricks
+within 4 seconds of each other for a combo multiplier (×1.5, ×2 … up to ×4); a wipeout loses the
+trick and the combo. Your best score per run is saved on your device. The numbers are in `GNAR`
+at the top of the scoring section in `js/main.js`.
+
+**Main menu**: the ☰ button (or Esc) pauses and opens the menu: resume, restart, change run or rider.
+
 
 ## Playing
 
@@ -113,7 +121,7 @@ vendor/             three.js r170 (MIT licence)
 
 ## Ideas for later
 
-- Scoring: stars, airtime, spins, clean landings
+- More tricks for gnar points: grabs, flips, buttering
 - Lodges (Roundhouse, Rendezvous) and the Village buildings
 - Run names on the HUD from traced run lines
 - Village buildings (only Creekside and Kadenwood are traced so far)

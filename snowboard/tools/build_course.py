@@ -409,6 +409,10 @@ def build_course(cid):
                 # keep only stations on the map (Peak 2 Peak runs off it to Blackcomb)
                 st.append({"name": p["name"], "x": round(x, 1), "z": round(z, 1)})
             lifts.append({"name": lf["name"], "type": lf["type"], "stations": st})
+        lodges = json.load(open(os.path.join(HERE, "traces/lifts.json"))).get("lodges", [])
+    for lo in lodges:
+        buildings.append({"area": 2000, "name": lo["name"], "points": [
+            [round(v, 1) for v in grid.to_xz(lat, lon)] for lat, lon in lo["points"]]})
 
     spawns = []
     for name, lat, lon in cfg.get("spawns", []):
