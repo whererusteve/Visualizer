@@ -6,7 +6,7 @@ import {
   fetchWindField, fetchLocal, fetchLocalTide, fetchTideStations, fetchQuakes, fetchKp,
   sampleSeries, kpAt,
 } from './data.js';
-import { computeResonance, resonanceAt } from './resonance.js';
+import { computeResonance, computeHotspots, resonanceAt, RHYTHMS } from './resonance.js';
 
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
@@ -251,6 +251,89 @@ function markDirty() {
   if (timeline) timeline.dirty = true;
 }
 
+// ---------- Hotspots list ----------
+// Upcoming alignments at world tide stations over the next 3 days. Strongest
+// (3+ rhythms) first in priority; the list is shown in time order.
+const fmtDur = (ms) => {
+  const m = Math.round(Math.abs(ms) / 60000);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h} h ${m % 60} m` : `${Math.floor(h / 24)} d ${h % 24} h`;
+};
+let hotKey = '';
+let hotItems = [];
+function upcomingHotspots() {
+  const from = state.t - 30 * 60000;
+  const to = state.t + 3 * DAY;
+  const all = [];
+  for (const h of state.hotspots || []) {
+    for (const m of h.moments) if (m.t >= from && m.t <= to) all.push({ h, m, n: m.events.length });
+  }
+  all.sort((a, b) => b.n - a.n || a.m.t - b.m.t);
+  const strong = all.filter((x) => x.n >= 3);
+  const pick = strong.length >= 6 ? strong.slice(0, 10) : [...strong, ...all.filter((x) => x.n < 3).slice(0, 6 - strong.length)];
+  return pick.sort((a, b) => a.m.t - b.m.t);
+}
+
+function renderHotspots() {
+  const ul = $('hotspot-list');
+  if (!state.layers.resonance.show) { ul.innerHTML = '<li class="empty">Turn on the Resonance layer to see hotspots.</li>'; hotKey = 'off'; return; }
+  if (!state.hotspots?.length) {
+    if (hotKey !== 'none') ul.innerHTML = `<li class="empty">${state.status.tides === 'loading' ? 'Loading world tides…' : 'World tide data unavailable.'}</li>`;
+    hotKey = 'none';
+    return;
+  }
+  const items = upcomingHotspots();
+  const key = items.map((x) => x.h.name + x.m.t).join('|');
+  if (key !== hotKey) {
+    hotKey = key;
+    hotItems = items;
+    ul.innerHTML = '';
+    if (!items.length) { ul.innerHTML = '<li class="empty">No alignments in the next 3 days.</li>'; return; }
+    items.forEach((x, i) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.className = 'hotspot';
+      b.dataset.i = i;
+      const dots = x.m.events.map((e) => `<i style="background:var(${RHYTHMS[e.r].color})" title="${RHYTHMS[e.r].name}"></i>`).join('');
+      b.innerHTML = `<span class="dots">${dots}</span><span class="where">${x.h.name}</span>
+        <span class="when"><span class="rel"></span><small class="abs"></small></span>
+        <span class="what">${x.m.events.map((e) => e.label).join(' + ')}</span>`;
+      b.addEventListener('click', () => goToHotspot(hotItems[i]));
+      li.appendChild(b);
+      ul.appendChild(li);
+    });
+  }
+  // Update the clock text in place so buttons stay clickable during time-lapse.
+  ul.querySelectorAll('.hotspot').forEach((b, i) => {
+    const x = hotItems[i];
+    const d = x.m.t - state.t;
+    const now = Math.abs(d) <= 30 * 60000;
+    b.classList.toggle('now', now);
+    const rel = now ? 'Now' : d > 0 ? `in ${fmtDur(d)}` : `${fmtDur(d)} ago`;
+    const relEl = b.querySelector('.rel');
+    if (relEl.textContent !== rel) relEl.textContent = rel;
+    // Approximate local time from longitude (time zones are close to this at the coast)
+    const local = new Date(x.m.t + Math.round(x.h.lon / 15) * HOUR).toLocaleString(undefined, { timeZone: 'UTC', weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    const absEl = b.querySelector('.abs');
+    const abs = `${local} local`;
+    if (absEl.textContent !== abs) absEl.textContent = abs;
+  });
+}
+
+// Go to a hotspot: move the listening point there, rewind to 90 minutes before
+// the alignment and play at 10 min/sec so it builds, locks in and fades.
+function goToHotspot(x) {
+  if (!x) return;
+  setLocation(x.h.lat, x.h.lon, x.h.name);
+  state.speed = 600;
+  $('speed').value = '600';
+  state.t = Math.max(state.t0, x.m.t - 90 * 60000);
+  lastT = state.t;
+  if (state.mode === 'play') audio.transition(); else setMode('play');
+  document.querySelector('.map-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // ---------- Quakes ----------
 function triggerQuake(q) {
   if (state.layers.quakes.show) map.addRipple(q.lat, q.lon, q.mag);
@@ -380,7 +463,12 @@ function frame(nowPerf) {
     if (state.t > state.t1) { state.t = state.t0; lastT = state.t; audio.transition(); }
   }
   state.kpNow = kpAt(state.data.kp, state.t);
-  if (resoDirty) { state.reso = computeResonance(state); resoDirty = false; timeline.dirty = true; }
+  if (resoDirty) {
+    state.reso = computeResonance(state);
+    state.hotspots = computeHotspots(state);
+    resoDirty = false;
+    timeline.dirty = true;
+  }
   state.resoNow = resonanceAt(state.reso.events, state.t);
   checkQuakeCrossings();
   map.setWindTime(state.data.wind, state.t);
@@ -389,6 +477,8 @@ function frame(nowPerf) {
   if (nowPerf - lastReadout > 150) {
     const s = sample();
     updateReadouts(s);
+    state.hotNow = (state.hotspots || []).map((h) => ({ h, R: resonanceAt(h.events, state.t).R }));
+    renderHotspots();
     lastReadout = nowPerf;
     if (nowPerf - lastAudio > 150) { audio.update(s); lastAudio = nowPerf; }
   }
@@ -414,7 +504,11 @@ async function boot() {
 
   $('map').addEventListener('click', (e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    const [lat, lon] = map.unproject(e.clientX - r.left, e.clientY - r.top);
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    const near = (state.data.tides || []).find((s) => { const [px, py] = map.project(s.lat, s.lon); return Math.hypot(px - x, py - y) < 14; });
+    if (near) { setLocation(near.lat, near.lon, near.name); return; }
+    const [lat, lon] = map.unproject(x, y);
     setLocation(lat, lon);
   });
 

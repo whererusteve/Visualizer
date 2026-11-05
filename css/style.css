@@ -101,6 +101,22 @@ h2 { font-size: 15px; margin: 22px 0 4px; letter-spacing: 0.03em; text-transform
 .toggle[aria-pressed="true"] { opacity: 1; border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.05); }
 .toggle:disabled { visibility: hidden; }
 
+.hotspot-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.hotspot {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; align-items: center; width: 100%;
+  background: var(--panel); border: 1px solid transparent; border-radius: 10px; padding: 10px 12px;
+  text-align: left; cursor: pointer;
+}
+.hotspot:hover, .hotspot:focus-visible { border-color: rgba(255,236,190,0.5); outline: none; }
+.hotspot.now { border-color: var(--reso); box-shadow: 0 0 18px rgba(255,236,190,0.25); }
+.hotspot .dots { grid-row: 1 / 3; display: flex; gap: 3px; }
+.hotspot .dots i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+.hotspot .where { font-weight: 600; }
+.hotspot .what { grid-column: 2; color: var(--muted); font-size: 13px; }
+.hotspot .when { grid-row: 1 / 3; grid-column: 3; text-align: right; font-size: 13px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.hotspot .when small { display: block; color: var(--muted); }
+.empty { color: var(--muted); font-size: 14px; padding: 6px 0; }
+
 .sources { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
 .sources li { font-size: 14px; }
 .sources a { color: var(--text); }
@@ -114,5 +130,5 @@ h2 { font-size: 15px; margin: 22px 0 4px; letter-spacing: 0.03em; text-transform
   .vol input { width: 70px; }
   .search input { width: 140px; }
   .map-hint { display: none; }
-  #layer-list { grid-template-columns: 1fr; }
+  #layer-list, .hotspot-list { grid-template-columns: 1fr; }
 }

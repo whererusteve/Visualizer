@@ -310,6 +310,7 @@ export class EarthMap {
       drawMoon(c, x, y, 7, moonIllumination(state.t).phase);
     }
 
+    if (L.resonance.show && state.hotNow) this.drawHotspots(state.hotNow);
     if (L.resonance.show && state.resoNow) this.drawResonance(state);
 
     // Listening point
@@ -392,6 +393,30 @@ EarthMap.prototype.drawResonance = function drawResonance(state) {
     c.strokeText(label, x, ty);
     c.fillStyle = '#fff4d6';
     c.fillText(label, x, ty);
+  }
+  c.restore();
+};
+
+// Tide stations that are resonating right now glow and pulse on the map.
+EarthMap.prototype.drawHotspots = function drawHotspots(hot) {
+  const c = this.ctx;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 350);
+  c.save();
+  for (const { h, R } of hot) {
+    if (R < 0.15) continue;
+    const [x, y] = this.project(h.lat, h.lon);
+    const rad = (10 + 18 * R + 4 * pulse * R) * this.ui;
+    const g = c.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, `rgba(255,244,214,${0.75 * R})`);
+    g.addColorStop(0.4, `rgba(255,226,170,${0.3 * R})`);
+    g.addColorStop(1, 'rgba(255,226,170,0)');
+    c.fillStyle = g;
+    c.beginPath(); c.arc(x, y, rad, 0, Math.PI * 2); c.fill();
+    c.globalAlpha = R;
+    c.strokeStyle = '#fff4d6';
+    c.lineWidth = 1.2;
+    c.beginPath(); c.arc(x, y, rad * (0.55 + 0.25 * pulse), 0, Math.PI * 2); c.stroke();
+    c.globalAlpha = 1;
   }
   c.restore();
 };

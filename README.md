@@ -28,7 +28,7 @@ turned on or off for both the map and the sound, so you can watch and hear how t
 
 Each rhythm has peak moments at the listening point: sunrise, solar noon, sunset, moonrise,
 moonset, high and low tide, the warmest and coolest part of the day, wind peaks, magnetic storms
-(Kp 5+) and M6+ earthquakes. Each rhythm also owns one note of the natural harmonic series on D.
+(Kp 5+) and large earthquakes. Each rhythm also owns one note of the natural harmonic series on D.
 
 - As a rhythm nears a peak, its note fades in slightly out of tune, so it wobbles (beats).
 - When two or more rhythms peak within about 30 minutes of each other, the notes slide into tune
@@ -37,6 +37,16 @@ moonset, high and low tide, the warmest and coolest part of the day, wind peaks,
   the sound. When rhythms line up, the rings merge into one glowing circle that sends out ripples.
 - On the timeline, a Resonance lane shows the strength over time, with a dot at each peak. Faint
   lines join peaks where two rhythms line up; bright lines mark three or more.
+
+**Resonance hotspots** run the same search at each of the 27 world tide stations (sun, moon and
+tide, plus nearby quakes and magnetic storms where auroras happen). They glow on the map while
+resonating, and a list shows the upcoming alignments over the next 3 days. Tapping one moves the
+listening point there and plays from 90 minutes before the alignment at 10 min/sec, so you can
+hear it build, lock in and fade. Air temperature and wind aren't part of hotspots, because that
+data is only fetched for the listening point.
+
+Quakes count toward resonance when they're M5+ within 1500 km, or M7+ anywhere. Magnetic storms
+(Kp 5+) count only at high geomagnetic latitudes, where auroras can actually be seen.
 
 Rhythms only count toward resonance while their 👁 toggle is on. The logic lives in
 `js/resonance.js`.

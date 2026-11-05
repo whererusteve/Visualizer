@@ -5,7 +5,7 @@
 // Notes of the harmonic series are the ones that ring together most purely,
 // which is why "lined up" rhythms sound like a chord settling into tune.
 
-import { sunAltitude, moonAltitude } from './astro.js';
+import { sunAltitude, moonAltitude, geomagneticLat } from './astro.js';
 
 const MIN = 60000;
 const HOUR = 60 * MIN;
@@ -64,10 +64,15 @@ function extrema(ts, ys, spanMs, onMax, onMin) {
   return out;
 }
 
-export function findEvents(state) {
-  const { lat, lon } = state.loc;
-  const { t0, t1 } = state;
-  const active = (r) => state.layers[RHYTHMS[r].layer].show;
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180;
+  const a = Math.sin(((lat2 - lat1) * r) / 2) ** 2 +
+    Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(((lon2 - lon1) * r) / 2) ** 2;
+  return 12742 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// Peak moments for any place. `tide` and `local` are optional series for that place.
+export function findEventsAt({ lat, lon, t0, t1, active, tide, local, kp, quakes }) {
   const ev = [];
   const ts = [];
   for (let t = t0; t <= t1; t += STEP) ts.push(t);
@@ -82,13 +87,11 @@ export function findEvents(state) {
     ev.push(...crossings(ts, alt, 0.13, 'Moonrise', 'Moonset', 'moon'));
     ev.push(...extrema(ts, alt, 6 * HOUR, (t, y) => (y > 0 ? { r: 'moon', t, label: 'Moon highest' } : null)));
   }
-  const tide = state.data.localTide;
   if (active('tide') && tide) {
     ev.push(...extrema(tide.times, tide.sea, 4 * HOUR,
       (t) => ({ r: 'tide', t, label: 'High tide' }),
       (t) => ({ r: 'tide', t, label: 'Low tide' })));
   }
-  const local = state.data.local;
   if (local) {
     if (active('temp')) {
       ev.push(...extrema(local.times, local.temp, 8 * HOUR,
@@ -100,17 +103,46 @@ export function findEvents(state) {
         (t, y) => (y >= 6 ? { r: 'wind', t, label: 'Wind peak' } : null)));
     }
   }
-  if (active('kp') && state.data.kp) {
+  // Magnetic storms only count where auroras can happen (high geomagnetic latitude).
+  if (active('kp') && kp && Math.abs(geomagneticLat(lat, lon)) >= 50) {
     let inStorm = false;
-    for (const k of state.data.kp) {
+    for (const k of kp) {
       if (k.kp >= 5 && !inStorm) ev.push({ r: 'kp', t: k.t + 1.5 * HOUR, label: 'Magnetic storm' });
       inStorm = k.kp >= 5;
     }
   }
-  if (active('quakes') && state.data.quakes) {
-    for (const q of state.data.quakes) if (q.mag >= 6) ev.push({ r: 'quakes', t: q.t, label: `M${q.mag.toFixed(1)} quake` });
+  // Quakes count when nearby (M5+ within 1500 km) or very large anywhere (M7+).
+  if (active('quakes') && quakes) {
+    for (const q of quakes) {
+      const near = distanceKm(lat, lon, q.lat, q.lon) < 1500;
+      if ((near && q.mag >= 5) || q.mag >= 7) {
+        ev.push({ r: 'quakes', t: q.t, label: `M${q.mag.toFixed(1)} quake${near ? ' nearby' : ''}` });
+      }
+    }
   }
   return ev.filter((e) => e.t >= t0 && e.t <= t1).sort((a, b) => a.t - b.t);
+}
+
+export function findEvents(state) {
+  return findEventsAt({
+    lat: state.loc.lat, lon: state.loc.lon, t0: state.t0, t1: state.t1,
+    active: (r) => state.layers[RHYTHMS[r].layer].show,
+    tide: state.data.localTide, local: state.data.local, kp: state.data.kp, quakes: state.data.quakes,
+  });
+}
+
+// Hotspots: the same search run at every world tide station (sun, moon, tide,
+// plus nearby quakes and polar magnetic storms). Air temperature and wind are
+// only fetched for the listening point, so they don't take part here.
+export function computeHotspots(state) {
+  const active = (r) => state.layers[RHYTHMS[r].layer].show;
+  return (state.data.tides || []).map((s) => {
+    const events = findEventsAt({
+      lat: s.lat, lon: s.lon, t0: state.t0, t1: state.t1, active,
+      tide: s, local: null, kp: state.data.kp, quakes: state.data.quakes,
+    });
+    return { name: s.name, lat: s.lat, lon: s.lon, events, moments: findMoments(events) };
+  });
 }
 
 // Moments where two or more different rhythms peak within WINDOW of each other.
