@@ -13,6 +13,19 @@ Three ways to ride (pick on the start screen):
   contributors) shown on CalTopo: 5.6 km, 1,508 m vertical. `#peak-to-creek`
 - **Peak to Village**: a line found along the real cleared runs (see Forest below): 6.4 km. `#whistler`
 
+**Rider & board** (start screen): pick jacket, pants, helmet or beanie, goggle lens, an avalanche
+airbag pack, stance, board colours and one of four boards. Each board changes the riding a little
+(numbers in `BOARDS` in `js/outfit.js`):
+
+| Board | Feel |
+|---|---|
+| All-mountain | the baseline |
+| Park twin | quicker turns, +30% spin speed, +15% pop, 15% less edge grip |
+| Powder swallowtail | about 7% less drag (faster), steadier, slower turns and spins |
+| Carving board | 40% more edge grip, slow spins |
+
+Choices are saved on your device.
+
 Scoring isn't in yet; this version is about the riding, the physics and the mountain.
 
 ## Playing
@@ -71,6 +84,7 @@ js/terrain.js       height lookups and the terrain mesh
 js/course.js        stars, jumps, trees, gates (LAYOUT numbers at the top)
 js/buildings.js     Creekside and Kadenwood buildings from real footprints
 js/trees.js         the forest near the rider, from the satellite forest map
+js/outfit.js        clothes, boards (shapes and handling) and the rider model
 js/rider.js         snowboard physics (PHYSICS numbers at the top) and the rider model
 js/audio.js         synthesized sounds (no audio files)
 tools/build_course.py   real elevation data → course files

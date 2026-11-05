@@ -142,7 +142,12 @@ function starGeometry() {
 function placeStars(terrain, route, kickers, rand) {
   const stars = [];
   const add = (x, z, lift = 1.1) => stars.push({ x, z, y: terrain.groundHeight(x, z) + lift });
-  const side = (p, off) => ({ x: p.x - p.dz * off, z: p.z + p.dx * off });
+  // Step sideways off the line, but never into the trees: a star that would land
+  // in forest goes back onto the line so you can always see and reach it.
+  const side = (p, off) => {
+    const q = { x: p.x - p.dz * off, z: p.z + p.dx * off };
+    return terrain.forestAt(q.x, q.z) > 0.25 ? { x: p.x, z: p.z } : q;
+  };
   const nearKicker = s => kickers.some(k => Math.abs(k.s - s) < 45);
   const patterns = ['line', 'slalom', 'line', 'zig', 'arc'];
   for (let s = 60; s < route.length - 60; s += LAYOUT.starEvery) {
@@ -349,7 +354,7 @@ export function buildCourse(terrain, scene) {
   const stars = (route ? placeStars(terrain, route, kickers, rand) : freeStars(terrain, rand, buildings).concat(kickerStars(terrain, kickers)))
     .filter(st => !buildings.hit(st.x, st.z, st.y, 2));
   const starMesh = new THREE.InstancedMesh(starGeometry(),
-    new THREE.MeshLambertMaterial({ color: 0xffd23a, emissive: 0x6b4a00 }), Math.max(1, stars.length));
+    new THREE.MeshLambertMaterial({ color: 0xffd23a, emissive: 0xb07800 }), Math.max(1, stars.length));
   starMesh.count = stars.length;
   starMesh.frustumCulled = false;
   scene.add(starMesh);

@@ -1,6 +1,7 @@
 // The snowboarder: physics (how the board moves on snow and through the air)
 // and the little 3D figure you see.
 import * as THREE from '../vendor/three.module.min.js';
+import { buildRiderModel, BOARDS, DEFAULT_OUTFIT } from './outfit.js';
 
 // All the feel of the game lives in these numbers. Units: metres, seconds.
 export const PHYSICS = {
@@ -40,12 +41,21 @@ export class Rider {
     this.crouch = 0;
     this.carve = 0;         // how much snow we're spraying
     this.events = [];       // 'land', 'crash', 'jump', 'trick' for sound & HUD
-    this.model = buildModel();
-    scene.add(this.model.root);
+    this.scene = scene;
+    this.setOutfit(DEFAULT_OUTFIT);
     this.shadow = new THREE.Mesh(new THREE.CircleGeometry(0.9, 20),
       new THREE.MeshBasicMaterial({ color: 0x0b1530, transparent: true, opacity: 0.32, depthWrite: false }));
     this.shadow.renderOrder = 1;
     scene.add(this.shadow);
+  }
+
+  // Change clothes and board. The board also changes how the rider handles.
+  setOutfit(outfit) {
+    if (this.model) this.scene.remove(this.model.root);
+    this.outfit = outfit;
+    this.board = BOARDS[outfit.board].stats;
+    this.model = buildRiderModel(outfit);
+    this.scene.add(this.model.root);
   }
 
   place(x, z, dirX, dirZ, speed = 0) {
@@ -89,11 +99,11 @@ export class Rider {
       if (vf < -0.8) { this.yaw += Math.PI; vf = -vf; vs = -vs; bf.negate(); side.negate(); }
 
       const speed = Math.hypot(vf, vs);
-      const turnRate = P.turnFast + (P.turnSlow - P.turnFast) / (1 + speed / 10);
+      const turnRate = (P.turnFast + (P.turnSlow - P.turnFast) / (1 + speed / 10)) * this.board.turn;
       this.yaw -= steer * turnRate * dt;
 
       // Edge grip: kill sideways sliding, keep part of it as forward speed.
-      const grip = input.brake ? 2.2 : P.edgeGrip;
+      const grip = input.brake ? 2.2 : P.edgeGrip * this.board.grip;
       const vs2 = vs * Math.exp(-grip * dt);
       const lost = Math.abs(vs) - Math.abs(vs2);
       vf += lost * (input.brake ? 0 : P.carveKeep);
@@ -102,7 +112,7 @@ export class Rider {
       // Snow friction and air drag slow you along the board.
       const normalAcc = P.gravity * Math.max(0.2, n.y);
       const mu = input.brake ? P.brakeFriction : P.snowFriction;
-      const cd = input.brake ? P.drag * 3 : input.tuck && speed > 6 ? P.tuckDrag : P.drag;
+      const cd = (input.brake ? P.drag * 3 : input.tuck && speed > 6 ? P.tuckDrag : P.drag) * this.board.drag;
       const slow = (mu * normalAcc + cd * speed * speed) * dt;
       vf = vf > 0 ? Math.max(0, vf - slow) : Math.min(0, vf + slow);
 
@@ -113,7 +123,7 @@ export class Rider {
       if (input.jump) this.charge = Math.min(1, this.charge + dt / 0.5);
       let pop = 0;
       if (!input.jump && this.charge > 0) {
-        pop = P.ollie + P.ollieCharged * this.charge;
+        pop = (P.ollie + P.ollieCharged * this.charge) * this.board.pop;
         this.charge = 0;
         this.events.push('jump');
       }
@@ -123,7 +133,7 @@ export class Rider {
       this.lean += ((steer * Math.min(1, speed / 12)) * 0.55 - this.lean) * Math.min(1, dt * 8);
     } else {
       // In the air: spin with left/right, keep the jump charge for landing.
-      const spin = steer * P.airSpin * dt;
+      const spin = steer * P.airSpin * this.board.spin * dt;
       this.yaw -= spin;
       this.spin += spin;
       v.multiplyScalar(1 - 0.0006 * v.length() * dt);
@@ -256,57 +266,3 @@ export class Rider {
 const _f = new THREE.Vector3(), _bf = new THREE.Vector3(), _side = new THREE.Vector3();
 const _n2 = new THREE.Vector3(), _h = new THREE.Vector3(), _z = new THREE.Vector3();
 const _mat = new THREE.Matrix4();
-
-function buildModel() {
-  const root = new THREE.Group();
-  const lean = new THREE.Group();          // tilts into turns
-  root.add(lean);
-  const mat = c => new THREE.MeshLambertMaterial({ color: c });
-  const board = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 1.55), mat(0xff3b30));
-  board.position.y = 0.03;
-  lean.add(board);
-  for (const z of [-0.78, 0.78]) {
-    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.05, 12, 1, false, 0, Math.PI), mat(0xff3b30));
-    tip.position.set(0, 0.03, z);
-    tip.rotation.y = z > 0 ? -Math.PI / 2 : Math.PI / 2;
-    lean.add(tip);
-  }
-  // Legs (scaled when crouching)
-  const legs = new THREE.Group();
-  for (const z of [-0.24, 0.24]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.6, 8), mat(0x1f2a44));
-    leg.position.set(0, 0.35, z);
-    legs.add(leg);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.16), mat(0x111111));
-    boot.position.set(0, 0.1, z);
-    legs.add(boot);
-  }
-  lean.add(legs);
-  // Upper body faces the toe edge, like a real rider.
-  const body = new THREE.Group();
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.45, 4, 10), mat(0x1e88e5));
-  torso.position.y = 0.3;
-  body.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10), mat(0xf1c27d));
-  head.position.y = 0.8;
-  body.add(head);
-  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat(0xffd23a));
-  helmet.position.y = 0.82;
-  body.add(helmet);
-  const goggles = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.26), mat(0x0f172a));
-  goggles.position.set(-0.15, 0.82, 0);
-  body.add(goggles);
-  const arms = new THREE.Group();
-  for (const z of [-0.3, 0.3]) {
-    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.42, 4, 8), mat(0x1e88e5));
-    arm.position.set(0, 0.35, z);
-    arm.rotation.x = z > 0 ? -1.1 : 1.1;
-    arms.add(arm);
-  }
-  arms.position.y = 0.05;
-  body.add(arms);
-  body.position.y = 0.95;
-  lean.add(body);
-  root.traverse(o => { o.castShadow = false; });
-  return { root, lean, body, legs, arms, up: new THREE.Vector3(0, 1, 0) };
-}

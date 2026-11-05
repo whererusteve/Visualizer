@@ -4,6 +4,7 @@ import { loadTerrain } from './terrain.js';
 import { buildCourse } from './course.js';
 import { Rider } from './rider.js';
 import { Sound } from './audio.js';
+import { COLORS, BOARDS, loadOutfit, saveOutfit } from './outfit.js';
 
 // Pick a run with #peak-to-creek or ?course=peak-to-creek; free ride by default.
 const COURSE_ID = location.hash.slice(1) || new URLSearchParams(location.search).get('course') || 'freeride';
@@ -193,7 +194,7 @@ const KEYMAP = {
 window.addEventListener('keydown', e => {
   if (KEYMAP[e.code]) { keys.add(KEYMAP[e.code]); e.preventDefault(); }
   if (e.code === 'KeyR') restart();
-  if (e.code === 'Enter' && game.state !== 'playing') begin();
+  if (e.code === 'Enter' && game.state !== 'playing' && game.state !== 'locker') begin();
 });
 window.addEventListener('keyup', e => { if (KEYMAP[e.code]) keys.delete(KEYMAP[e.code]); });
 window.addEventListener('blur', () => keys.clear());
@@ -259,6 +260,7 @@ function begin() {
   sound.start();
   document.activeElement?.blur();
   $('intro').hidden = true;
+  $('locker').hidden = true;
   if (game.state === 'finished') restart();
   game.state = 'playing';
 }
@@ -270,7 +272,26 @@ function snapCamera() {
   rider.forward(camDir);
   updateCamera(1, true);
 }
+// In the locker, look at the rider from the front so you can see the outfit.
+function lockerCamera(t) {
+  const p = rider.p, f = rider.forward();
+  const ang = Math.sin(t * 0.4) * 0.5;               // slow sway
+  const side = new THREE.Vector3(-f.z, 0, f.x);      // the rider's toe side
+  const goofy = rider.outfit.stance === 'goofy' ? -1 : 1;
+  const dir = side.multiplyScalar(goofy).applyAxisAngle(_yAxis, ang);
+  camera.position.set(p.x + dir.x * 3.6, p.y + 1.6, p.z + dir.z * 3.6);
+  camera.lookAt(p.x, p.y + 0.9, p.z);
+  // Shift the picture so the rider sits in the space the panel leaves free:
+  // to the right of it on wide screens, above it when it's a bottom sheet.
+  const w = window.innerWidth, h = window.innerHeight;
+  if (w > 560) camera.setViewOffset(w, h, -w * 0.24, 0, w, h);
+  else camera.setViewOffset(w, h, 0, h * 0.22, w, h);
+  camera.fov = 50;
+  camera.updateProjectionMatrix();
+  sky.position.copy(camera.position);
+}
 function updateCamera(dt, snap = false) {
+  if (camera.view && camera.view.enabled) camera.clearViewOffset();
   const p = rider.p, v = rider.v;
   const hs = Math.hypot(v.x, v.z);
   const want = hs > 2 ? new THREE.Vector3(v.x / hs, 0, v.z / hs) : rider.forward();
@@ -331,16 +352,17 @@ function starsNear(x, z, r) {
 function resetStarMatrices() {
   course.stars.forEach(st => { st.got = -1; });
 }
-// Only stars within STAR_DRAW metres are drawn (packed into the first slots of
-// the instanced mesh); further ones are too small to see through the haze anyway.
-const STAR_DRAW = 450;
+// Stars are packed into the first slots of the instanced mesh each frame;
+// collected ones are left out.
+// On a course every star is drawn (a few hundred); free ride draws those within 900 m.
+const starDraw = () => (course.route ? 1e6 : 900);
 function updateStars(now) {
   bodyNow.copy(rider.p).addScaledVector(rider.n, 0.9);
   if (!havePrev) { bodyPrev.copy(bodyNow); havePrev = true; }
   const mesh = course.starMesh;
   _q.setFromAxisAngle(_yAxis, now * 3);
   let n = 0;
-  for (const st of starsNear(rider.p.x, rider.p.z, STAR_DRAW)) {
+  for (const st of (course.route ? course.stars : starsNear(rider.p.x, rider.p.z, starDraw()))) {
     if (st.got < 0 && rider.crashed <= 0 && game.state === 'playing') {
       if (distToPath(st, bodyPrev, bodyNow) < STAR_REACH) {
         st.got = now;
@@ -362,6 +384,80 @@ function updateStars(now) {
   mesh.count = n;
   mesh.instanceMatrix.needsUpdate = true;
   bodyPrev.copy(bodyNow);
+}
+
+// ---------- Locker: clothes and board ----------
+let outfit = null;
+function buildLocker() {
+  outfit = { ...rider.outfit };
+  const body = $('locker-body');
+  body.textContent = '';
+  const hex = n => '#' + n.toString(16).padStart(6, '0');
+  const apply = () => { rider.setOutfit({ ...outfit }); saveOutfit(outfit); buildLocker(); };
+  const row = (label, el) => {
+    const r = document.createElement('div'); r.className = 'row';
+    const l = document.createElement('div'); l.className = 'label'; l.textContent = label;
+    r.append(l, el); body.append(r);
+  };
+  const swatches = (key, group) => {
+    const wrap = document.createElement('div'); wrap.className = 'swatches';
+    for (const [name, c] of Object.entries(COLORS[group])) {
+      const b = document.createElement('button');
+      b.className = 'swatch'; b.style.background = hex(c); b.title = name;
+      b.setAttribute('aria-label', name);
+      b.setAttribute('aria-pressed', String(outfit[key] === name));
+      b.onclick = () => { outfit[key] = name; apply(); };
+      wrap.append(b);
+    }
+    return wrap;
+  };
+  const chips = (key, options) => {
+    const wrap = document.createElement('div'); wrap.className = 'chips';
+    for (const [value, label] of options) {
+      const b = document.createElement('button');
+      b.className = 'chip'; b.textContent = label;
+      b.setAttribute('aria-pressed', String(outfit[key] === value));
+      b.onclick = () => { outfit[key] = value; apply(); };
+      wrap.append(b);
+    }
+    return wrap;
+  };
+  row('Jacket', swatches('jacket', 'jacket'));
+  row('Pants', swatches('pants', 'pants'));
+  row('On your head', chips('headwear', [['helmet', 'Helmet'], ['beanie', 'Beanie']]));
+  row(outfit.headwear === 'beanie' ? 'Beanie colour' : 'Helmet colour', swatches('head', 'head'));
+  row('Goggle lens', swatches('lens', 'lens'));
+  row('Pack', chips('pack', [[false, 'None'], [true, 'Avalanche airbag pack']]));
+  // Boards, with what each one does to the riding.
+  const boards = document.createElement('div'); boards.className = 'boards';
+  const bar = v => Math.round(Math.min(1, Math.max(0.1, (v - 0.6) / 0.9)) * 100);
+  for (const [id, b] of Object.entries(BOARDS)) {
+    const card = document.createElement('button');
+    card.className = 'boardcard';
+    card.setAttribute('aria-pressed', String(outfit.board === id));
+    const st = b.stats;
+    card.innerHTML = `<strong></strong><span></span><div class="stats">
+      <span>Turning</span><i><b style="width:${bar(st.turn)}%"></b></i>
+      <span>Edge grip</span><i><b style="width:${bar(st.grip)}%"></b></i>
+      <span>Spins</span><i><b style="width:${bar(st.spin)}%"></b></i>
+      <span>Speed</span><i><b style="width:${bar(2 - st.drag)}%"></b></i>
+      <span>Pop</span><i><b style="width:${bar(st.pop)}%"></b></i></div>`;
+    card.querySelector('strong').textContent = b.name;
+    card.querySelector('span').textContent = b.blurb;
+    card.onclick = () => { outfit.board = id; apply(); };
+    boards.append(card);
+  }
+  row('Board', boards);
+  row('Board colour', swatches('boardColor', 'board'));
+  row('Top sheet stripe', swatches('accent', 'accent'));
+  row('Stance', chips('stance', [['regular', 'Regular (left foot forward)'], ['goofy', 'Goofy (right foot forward)']]));
+}
+function openLocker(open) {
+  $('locker').hidden = !open;
+  $('intro').hidden = open;
+  game.state = open ? 'locker' : 'intro';
+  document.body.classList.toggle('in-locker', open);
+  if (!open) snapCamera();
 }
 
 // ---------- Minimap ----------
@@ -486,7 +582,7 @@ function frame(now) {
   course.trees.update(rider.p.x, rider.p.z);
   rider.updateModel(dt, t);
   updateStars(t);
-  updateCamera(dt);
+  if (game.state === 'locker') lockerCamera(t); else updateCamera(dt);
   updateHud();
   renderer.render(scene, camera);
 }
@@ -521,12 +617,17 @@ async function init() {
     spawnPick.addEventListener('change', () => { game.spawn = +spawnPick.value; restart(); });
     $('spawn-row').hidden = false;
   }
+  course.stars.forEach((st, i) => { st.i = i; });
+  rider.setOutfit(loadOutfit());
+  buildLocker();
   buildMinimap();
   restart();
   game.state = 'intro';
   $('loading').hidden = true;
   $('drop').disabled = false;
   $('drop').addEventListener('click', begin);
+  $('locker-open').addEventListener('click', () => openLocker(true));
+  $('locker-done').addEventListener('click', () => openLocker(false));
   $('again').addEventListener('click', () => { restart(); begin(); });
   $('restart').addEventListener('click', () => { restart(); });
   requestAnimationFrame(frame);

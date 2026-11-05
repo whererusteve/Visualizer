@@ -60,7 +60,16 @@
     </table>
     <p id="loading" class="note">Building the mountain…</p>
     <p class="credits">Elevation: Mapzen Terrarium tiles (AWS Open Data). Forest: contains modified Copernicus Sentinel-2 data (2023). Runs and buildings: © OpenStreetMap contributors.</p>
-    <button id="drop" class="go" disabled>Drop in</button>
+    <div class="intro-actions">
+      <button id="locker-open" class="ghost">Rider &amp; board</button>
+      <button id="drop" class="go" disabled>Drop in</button>
+    </div>
+  </div>
+
+  <div id="locker" class="panel locker" hidden>
+    <h2>Rider &amp; board</h2>
+    <div id="locker-body"></div>
+    <button id="locker-done" class="go">Done</button>
   </div>
 
   <div id="finish" class="panel" hidden>
